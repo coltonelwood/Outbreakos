@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 40% 9%;
+    --card-foreground: 210 40% 98%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 33% 18%;
+    --input: 217 33% 16%;
+    --ring: 199 89% 48%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 222 47% 6%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 70% 45%;
+    --warning: 38 92% 50%;
+    --info: 199 89% 48%;
+    --radius: 0.625rem;
+    --font-sans: "Inter", system-ui, sans-serif;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html,
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.3);
+  }
+}
+
+@layer components {
+  .gradient-mesh {
+    background-image:
+      radial-gradient(at 20% 10%, hsl(199 89% 48% / 0.18) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, hsl(263 70% 50% / 0.15) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsl(142 70% 45% / 0.12) 0px, transparent 50%);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: -1px -1px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  .glass {
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+
+  /* Leaflet overrides for dark theme */
+  .leaflet-container {
+    background: #0a1428 !important;
+  }
+  .leaflet-tile {
+    filter: hue-rotate(180deg) invert(0.92) brightness(0.95) contrast(0.95);
+  }
+  .leaflet-control-attribution {
+    background: rgba(0, 0, 0, 0.4) !important;
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .leaflet-control-attribution a {
+    color: hsl(var(--primary)) !important;
+  }
+  .leaflet-popup-content-wrapper,
+  .leaflet-popup-tip {
+    background: hsl(var(--card)) !important;
+    color: hsl(var(--foreground)) !important;
+    border: 1px solid hsl(var(--border));
+  }
+}
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    background: white !important;
+    color: black !important;
+  }
+  .print-page * {
+    color: black !important;
+    border-color: #ddd !important;
+    background: white !important;
+  }
+}
