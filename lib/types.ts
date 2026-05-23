@@ -67,6 +67,7 @@ export interface Site {
 
 export interface OutbreakRegion {
   id: string;
+  orgId: string;
   name: string;
   country: string;
   lat: number;

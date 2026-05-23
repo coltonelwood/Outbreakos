@@ -1,26 +1,25 @@
-import { db } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ContactStatusPill } from "@/components/ui/status-pill";
+import { data } from "@/lib/store";
+import { requireSession } from "@/lib/auth";
+import { Card, CardContent } from "@/components/ui/card";
 import { ContactsClient } from "./contacts-client";
-import { UserPlus } from "lucide-react";
 
 export default function ContactsPage() {
-  const d = db();
+  const sess = requireSession();
+  const contacts = data.contacts(sess.orgId);
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Contact Monitoring</h1>
           <p className="text-muted-foreground text-sm">
-            21-day daily check-ins for contacts of suspected / confirmed cases.
+            21-day daily check-ins for contacts linked to operational screenings or cases.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {(["active", "escalated", "cleared", "lost_to_follow_up"] as const).map((s) => {
-          const count = d.contacts.filter((c) => c.status === s).length;
+          const count = contacts.filter((c) => c.status === s).length;
           return (
             <Card key={s}>
               <CardContent className="p-4">
@@ -34,7 +33,7 @@ export default function ContactsPage() {
         })}
       </div>
 
-      <ContactsClient contacts={d.contacts} />
+      <ContactsClient contacts={contacts} />
     </div>
   );
 }

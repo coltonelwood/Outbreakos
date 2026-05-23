@@ -8,9 +8,9 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { AlertStatusPill, SeverityPill } from "@/components/ui/status-pill";
 import { relativeTime } from "@/lib/utils";
 import { Plus, CheckCircle2, Eye, XCircle } from "lucide-react";
-import type { Alert } from "@/lib/types";
+import type { Alert, Profile } from "@/lib/types";
 
-export function AlertsClient({ alerts: initial }: { alerts: Alert[] }) {
+export function AlertsClient({ alerts: initial, users }: { alerts: Alert[]; users: Profile[] }) {
   const router = useRouter();
   const [alerts, setAlerts] = useState(initial);
   const [filter, setFilter] = useState<"all" | "open" | "ack" | "resolved">("all");

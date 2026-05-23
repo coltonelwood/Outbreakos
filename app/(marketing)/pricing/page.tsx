@@ -6,49 +6,52 @@ import { Check } from "lucide-react";
 
 const tiers = [
   {
-    name: "Starter",
-    price: "$5,000",
-    cadence: "per site / month",
-    description: "Single-site screening + monitoring for an airport, mine, hospital, or clinic.",
+    name: "Industrial Site",
+    price: "$60,000",
+    cadence: "per site / year",
+    description: "Single-site continuity-of-operations for a mine, industrial camp, airport, hospital, or clinic.",
     features: [
       "1 site, up to 25 users",
-      "Screening workflows + risk tiering",
-      "Contact monitoring (21-day)",
+      "Screening workflows + operational tiering",
+      "21-day contact monitoring",
       "Daily SITREP generation",
+      "Role-based access + audit log",
       "Email + chat support",
     ],
-    cta: { label: "Start with Starter", href: "/contact" },
+    cta: { label: "Talk to sales", href: "/contact?intent=industrial" },
   },
   {
-    name: "Response Pro",
+    name: "Multi-Site Command",
     price: "$25,000",
-    cadence: "per operation / month",
-    description: "Multi-site coordination for a single operation or response cluster.",
+    cadence: "per month",
+    description: "Cross-site coordination for an operator or response cluster.",
     features: [
       "Up to 10 sites, unlimited users",
-      "Multi-site command view",
+      "Multi-site command view + corridors",
       "AI command assistant (with provider plug-in)",
       "Branded SITREPs + donor reports",
-      "24/7 incident support",
-      "Custom risk weighting",
+      "Slack alert routing",
+      "Custom risk weighting per org",
+      "Priority response support",
     ],
     highlight: true,
-    cta: { label: "Talk to deployment team", href: "/contact" },
+    cta: { label: "Talk to deployment team", href: "/contact?intent=pilot" },
   },
   {
-    name: "Enterprise / Government",
+    name: "Government / Enterprise",
     price: "Custom",
     cadence: "from $100k / year",
-    description: "Nation-wide or enterprise-wide deployment with SLAs and integrations.",
+    description: "Nation-wide or enterprise-wide deployment with SLAs, integrations, and procurement-friendly artifacts.",
     features: [
       "Unlimited sites and users",
       "Government Emergency Operations Mode",
-      "Risk corridor tracking + cluster detection",
+      "Risk corridor + cluster detection",
       "Custom integrations (lab, EHR, ministry feeds)",
-      "Dedicated success engineer",
-      "On-site training",
+      "Dedicated deployment engineer",
+      "SSO / SAML / OIDC (pilot)",
+      "DPA + security questionnaire pack",
     ],
-    cta: { label: "Contact sales", href: "/contact" },
+    cta: { label: "Contact sales", href: "/contact?intent=enterprise" },
   },
 ];
 
@@ -57,8 +60,8 @@ export default function PricingPage() {
     <>
       <PageHero
         eyebrow="Pricing"
-        title="Built for sites in calm — and operations in crisis."
-        description="Transparent tiers for everyday surveillance and an emergency deployment package when minutes matter."
+        title="Priced for the operations that can't afford to be down."
+        description="Transparent tiers for industrial sites, multi-site responses, and national programs."
       />
 
       <section className="container py-12">
@@ -74,7 +77,7 @@ export default function PricingPage() {
             >
               {t.highlight && (
                 <div className="absolute -top-3 left-5 rounded-full bg-primary px-3 py-0.5 text-xs font-semibold text-primary-foreground">
-                  Most operations
+                  Best for multi-site response
                 </div>
               )}
               <CardHeader>
@@ -112,19 +115,19 @@ export default function PricingPage() {
             Emergency Deployment Package
           </p>
           <h2 className="mt-2 text-2xl md:text-3xl font-bold">
-            $50,000 setup + monthly retainer
+            $150,000 — 30-day deployment + monthly retainer
           </h2>
           <p className="mt-3 text-muted-foreground max-w-2xl">
-            Stand up a fully configured OutbreakOS tenant, branded SITREPs,
-            screening lanes, and contact monitoring live within 72 hours. For
-            ministries, NGOs, and operators responding to an active situation.
+            Fully configured OutbreakOS tenant, branded SITREPs, screening lanes,
+            and contact monitoring live within 72 hours. For ministries, NGOs,
+            and operators responding to an active situation.
           </p>
           <ul className="mt-6 grid md:grid-cols-2 gap-2 text-sm">
             {[
               "Dedicated deployment engineer for 30 days",
               "On-site or remote screener training",
               "Branded donor / ministry reporting templates",
-              "Direct support hotline + incident channel",
+              "Direct deployment Slack channel + on-call response",
             ].map((p) => (
               <li key={p} className="flex items-start gap-2">
                 <Check className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5 shrink-0" />
@@ -132,17 +135,19 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link href="/contact" className="inline-block mt-6">
+          <Link href="/contact?intent=emergency" className="inline-block mt-6">
             <Button>Request emergency deployment</Button>
           </Link>
         </div>
       </section>
 
       <section className="container pb-20">
-        <h2 className="text-2xl font-bold mb-6">Run the numbers</h2>
+        <h2 className="text-2xl font-bold mb-3">Run the numbers</h2>
         <p className="text-muted-foreground max-w-2xl">
           Use the ROI calculator to model continuity protection, screening
-          throughput, and avoided downtime at your site or operation.
+          throughput, and conservative avoided downtime at your operation. The
+          calculator uses the same pricing function as this page, so the
+          numbers reconcile.
         </p>
         <Link href="/roi" className="inline-block mt-4">
           <Button variant="outline">Open ROI calculator</Button>

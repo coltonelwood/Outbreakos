@@ -4,15 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RiskPill } from "@/components/ui/status-pill";
 import { NotADiagnosticBanner } from "@/components/ui/disclaimer";
 import { PrintButton } from "@/components/app/print-button";
-import { db } from "@/lib/store";
+import { data } from "@/lib/store";
+import { requireSession } from "@/lib/auth";
 import { formatDateTime } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 
 export default function ScreeningDetail({ params }: { params: { id: string } }) {
-  const d = db();
-  const s = d.screenings.find((x) => x.id === params.id);
+  const sess = requireSession();
+  const s = data.screenings(sess.orgId).find((x) => x.id === params.id);
   if (!s) notFound();
-  const site = d.sites.find((x) => x.id === s.siteId);
+  const site = data.sites(sess.orgId).find((x) => x.id === s.siteId);
 
   return (
     <div className="space-y-4 print-page">
@@ -20,9 +21,7 @@ export default function ScreeningDetail({ params }: { params: { id: string } }) 
         <Link href="/dashboard/screenings" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Back to screenings
         </Link>
-        <div className="flex gap-2">
-          <PrintButton />
-        </div>
+        <PrintButton />
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -110,4 +109,3 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

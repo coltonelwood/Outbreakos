@@ -25,7 +25,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         env:
           NEXT_PUBLIC_DEMO_MODE: "true"
+          SESSION_SECRET: ci-only-non-production-secret
         run: npm run build

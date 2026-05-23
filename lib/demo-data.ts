@@ -148,6 +148,7 @@ export const DEMO_SITES: Site[] = [
 export const DEMO_REGIONS: OutbreakRegion[] = [
   {
     id: "reg_bundibugyo",
+    orgId: "org_demo",
     name: "Bundibugyo District",
     country: "Uganda",
     lat: 0.7117,
@@ -163,6 +164,7 @@ export const DEMO_REGIONS: OutbreakRegion[] = [
   },
   {
     id: "reg_kasese",
+    orgId: "org_demo",
     name: "Kasese District",
     country: "Uganda",
     lat: 0.1833,
@@ -178,6 +180,7 @@ export const DEMO_REGIONS: OutbreakRegion[] = [
   },
   {
     id: "reg_ituri",
+    orgId: "org_demo",
     name: "Ituri Province",
     country: "DRC",
     lat: 1.5,
@@ -193,6 +196,7 @@ export const DEMO_REGIONS: OutbreakRegion[] = [
   },
   {
     id: "reg_north_kivu",
+    orgId: "org_demo",
     name: "North Kivu",
     country: "DRC",
     lat: -0.7,

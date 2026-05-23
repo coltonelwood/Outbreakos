@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { addAlert, db } from "@/lib/store";
+import { addAlert, data } from "@/lib/store";
+import { authErrorResponse, requireCapability } from "@/lib/auth";
 
 const schema = z.object({
-  title: z.string().min(1),
-  description: z.string().min(1),
+  title: z.string().min(1).max(200),
+  description: z.string().min(1).max(2000),
   severity: z.enum(["info", "warning", "high", "critical"]),
   category: z.enum([
     "high_risk_screening",
@@ -18,14 +19,26 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-  const parsed = schema.safeParse(await req.json());
+  let sess;
+  try {
+    sess = requireCapability("alert.create");
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+  const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const a = addAlert(parsed.data);
+  const a = addAlert(sess.orgId, sess.userId, parsed.data);
   return NextResponse.json({ alert: a });
 }
 
 export async function GET() {
-  return NextResponse.json({ alerts: db().alerts });
+  let sess;
+  try {
+    sess = requireCapability("alert.read");
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+  return NextResponse.json({ alerts: data.alerts(sess.orgId) });
 }

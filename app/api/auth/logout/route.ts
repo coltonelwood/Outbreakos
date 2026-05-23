@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/store";
 
 export async function POST() {
   const s = getSession();
-  if (s) logAudit(s.userId, "auth.logout", s.userId);
+  if (s) logAudit(s.orgId, s.userId, "auth.logout", s.userId);
   clearSession();
   return NextResponse.json({ ok: true });
 }

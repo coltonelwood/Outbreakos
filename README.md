@@ -1,9 +1,9 @@
 # OutbreakOS
 
-**AI-powered outbreak operations command center** — real-time screening,
-contact monitoring, resource coordination, AI briefings, and executive
-reporting for airports, mining sites, hospitals, NGOs, and government
-response teams.
+**Operational health-security infrastructure for high-risk workforces.**
+Screening, contact monitoring, resource logistics, AI briefings, and executive
+reporting — built first for mining and industrial operators, with adjacent
+deployments for airports, hospitals, NGOs, and governments.
 
 > OutbreakOS is **not** a medical diagnostic device. It supports operational
 > screening, contact monitoring, logistics, and reporting workflows.
@@ -13,27 +13,18 @@ response teams.
 
 ## What's in the box
 
-- Next.js 14 App Router + TypeScript + Tailwind + shadcn-style components
-- Public marketing site (Home, Solutions, Airports, Mining, Hospitals,
-  Government & NGO, Pricing, Security, Compliance, Contact, ROI)
-- Authenticated command-center dashboard:
-  - Operations Overview (live stats, AI summary, chart, alerts)
-  - Outbreak Map (Leaflet, severity filters, sites + regions)
-  - Screening workflow (airport / site-entry / clinic, risk tiering, printable record)
-  - Contact monitoring (21-day timeline, SMS / WhatsApp templates, escalation)
-  - Alerts center (categories, severity, status, manual creation)
-  - Resource logistics (PPE / sample kits / beds / staff / vehicles + AI forecast)
-  - Situation reports (5 kinds, AI-assisted, printable PDF view)
-  - AI Command Center (briefings, summaries, stakeholder drafts, with citations)
-  - Multi-site command (corridors, cluster detection, sites at a glance)
-  - Sites, Settings (providers, RBAC, risk weights, branding, data export)
-  - Audit log
-  - In-app Demo Script (sales-ready walk-through)
-- Supabase SQL schema with RLS policies + seed data
-- Provider-agnostic AI abstraction (OpenAI, Anthropic, or deterministic fallback)
-- Twilio / WhatsApp messaging abstraction (templates work offline)
-- Stripe-ready pricing architecture
-- Vercel-ready deployment
+- Next.js 14 App Router + TypeScript + Tailwind
+- Multi-tenant, role-aware (Owner / Admin / Health Officer / Screener / Viewer)
+- HMAC-signed sessions; per-IP rate limiting on auth, AI, lead, screening, report endpoints
+- Provider-agnostic AI (OpenAI / Anthropic / deterministic fallback that reads live org data)
+- Cached AI dashboard briefing with manual refresh — no AI call on every page load
+- Configurable operational risk weights per org (audited)
+- Lead capture with Slack webhook notification and persistent lead table
+- Real CSV export, JSON org export (owner-only), audit log search & CSV export
+- Public marketing site, in-app demo script (gated to internal owner/admin), ROI calculator with shared pricing function
+- Supabase schema with RLS policies + seed data ready to wire up
+- Unit tests for risk scoring and permissions
+- CI on every push and PR (typecheck + tests + build)
 
 ---
 
@@ -43,51 +34,51 @@ response teams.
 git clone <this repo>
 cd outbreakos
 npm install
-cp .env.example .env.local      # works out of the box
-npm run dev                     # http://localhost:3000
+cp .env.example .env.local      # works out of the box for demo
+SESSION_SECRET=dev-secret npm run dev
+# http://localhost:3000
 ```
 
-The product runs **fully in demo mode with no API keys configured**. All data
-is seeded in memory; the Supabase schema is provided for when you're ready to
-swap in a real backend.
+The product runs in demo mode with no API keys configured. All data is seeded
+in-process; the Supabase schema is provided for production.
 
-### Demo accounts (password: `demo` for all)
+### Demo accounts (password `demo` for all five)
 
-| Email | Role | Use for |
-| --- | --- | --- |
-| `demo@outbreakos.io` | Owner | Default tour |
-| `admin@outbreakos.io` | Admin | Settings, resources |
-| `ho@outbreakos.io` | Health Officer | Alerts, contacts, reports |
-| `screener@outbreakos.io` | Screener | Screening workflow |
-| `viewer@outbreakos.io` | Viewer | Investor / read-only walkthrough |
+| Email                      | Role            | Use for                          |
+| -------------------------- | --------------- | -------------------------------- |
+| `demo@outbreakos.io`       | Owner           | Default tour                     |
+| `admin@outbreakos.io`      | Admin           | Settings, resources              |
+| `ho@outbreakos.io`         | Health Officer  | Alerts, contacts, reports        |
+| `screener@outbreakos.io`   | Screener        | Screening workflow only          |
+| `viewer@outbreakos.io`     | Viewer          | Investor / read-only walkthrough |
 
-Sign in at `/login`, or click the quick-account chips on the login form.
+Sign in at `/login`. The login form has one-click chips for each role.
 
-The seeded scenario is `drc-uganda-bundibugyo-2026` — a cross-border response
-across Bundibugyo (Uganda), Kasese, Ituri (DRC), and North Kivu. Every record
-is labeled **demo data** in the UI.
+**New signups create their own org.** New tenants land on an onboarding
+checklist, NOT the demo data. The seeded Bundibugyo scenario is only visible
+to the five seeded demo accounts.
 
 ---
 
 ## Environment variables
 
-See `.env.example`. The platform reads:
+See `.env.example`. Key vars:
 
-| Variable | Purpose | Required? |
-| --- | --- | --- |
-| `NEXT_PUBLIC_DEMO_MODE` | Run with in-memory store + seed data | default `true` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | optional |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public) | optional |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role for migrations | optional |
-| `AI_PROVIDER` | `openai` / `anthropic` / `none` | default `none` |
-| `OPENAI_API_KEY` | OpenAI key (server-only) | optional |
-| `ANTHROPIC_API_KEY` | Anthropic key (server-only) | optional |
-| `MESSAGING_PROVIDER` | `twilio` / `whatsapp` / `none` | default `none` |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Twilio | optional |
-| `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe checkout | optional |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | Mapbox (Leaflet+OSM works without it) | optional |
+| Variable                       | Required               | Purpose                                            |
+| ------------------------------ | ---------------------- | -------------------------------------------------- |
+| `SESSION_SECRET`               | **required in prod**   | HMAC signing key for session cookies               |
+| `NEXT_PUBLIC_DEMO_MODE`        | default `true`         | Seeded scenario + demo accounts active             |
+| `NEXT_PUBLIC_SUPABASE_URL`     | optional               | Supabase project URL                               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`| optional               | Supabase anon key                                  |
+| `SUPABASE_SERVICE_ROLE_KEY`    | optional               | For migrations                                     |
+| `AI_PROVIDER`                  | default `none`         | `openai` / `anthropic` / `none`                    |
+| `OPENAI_API_KEY`               | conditional            | Required if `AI_PROVIDER=openai`                   |
+| `ANTHROPIC_API_KEY`            | conditional            | Required if `AI_PROVIDER=anthropic`                |
+| `LEADS_WEBHOOK_URL`            | recommended            | Slack webhook for new pilot leads                  |
+| `MESSAGING_PROVIDER`           | default `none`         | `twilio` / `whatsapp` / `none`                     |
+| `TWILIO_ACCOUNT_SID/TOKEN/FROM`| conditional            | Required if `MESSAGING_PROVIDER=twilio`            |
 
-Secrets never reach the browser; only `NEXT_PUBLIC_*` values are exposed
+Server-only secrets never reach the browser; only `NEXT_PUBLIC_*` is exposed
 client-side.
 
 ---
@@ -95,15 +86,14 @@ client-side.
 ## Supabase deployment
 
 1. Create a new Supabase project.
-2. Run `supabase/schema.sql` in the SQL editor (creates tables, indexes, RLS).
-3. Run `supabase/seed.sql` to seed the demo scenario into a real database.
-4. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
-   `.env.local` (or your Vercel project).
-5. Swap the in-memory store calls in `lib/store.ts` for Supabase client calls
-   — the data shapes match exactly.
+2. Run `supabase/schema.sql` in the SQL editor (tables, indexes, RLS).
+3. Run `supabase/seed.sql` if you want the Bundibugyo demo scenario in DB.
+4. Add Supabase env vars to `.env.local` or Vercel project.
+5. Replace `lib/store.ts` implementations with Supabase client queries —
+   the `data` accessor + mutation function signatures are stable.
 
-RLS policies enforce **multi-tenant isolation at the row level** via the
-`auth_org_id()` SQL helper.
+RLS enforces tenant isolation at the row level via the `auth_org_id()` SQL
+helper.
 
 ---
 
@@ -111,67 +101,97 @@ RLS policies enforce **multi-tenant isolation at the row level** via the
 
 ```bash
 vercel link
-vercel env add OPENAI_API_KEY                  # (optional)
-vercel env add NEXT_PUBLIC_SUPABASE_URL        # (optional)
-vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY   # (optional)
+vercel env add SESSION_SECRET production       # REQUIRED — generate with: openssl rand -base64 48
+vercel env add LEADS_WEBHOOK_URL production    # Slack webhook
+vercel env add OPENAI_API_KEY production       # optional
 vercel --prod
 ```
 
-The app is fully static-friendly for marketing pages and uses Next.js server
-components for dashboard data.
+`vercel.json` pins build settings and security headers (HSTS, X-Frame-Options,
+X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
 
 ---
 
-## Test checklist
+## Testing
 
-- [ ] `/` loads marketing home with hero, modules, audiences, CTA.
-- [ ] Each of `/airports`, `/mining`, `/hospitals`, `/government`, `/solutions`,
-      `/pricing`, `/security`, `/compliance`, `/contact`, `/roi` renders.
-- [ ] `/contact` form submits successfully (logged to audit).
-- [ ] `/roi` calculator updates totals live and downloads proposal text.
-- [ ] `/login` allows sign-in with each demo account.
-- [ ] `/signup` creates an account and lands on the dashboard.
-- [ ] `/dashboard` shows stats, AI summary, chart, regions, alerts.
-- [ ] `/dashboard/map` renders the Leaflet map with markers + circles.
-- [ ] `/dashboard/screenings/new` scores a screening end-to-end and shows
-      the operational risk tier with explainable rationale.
-- [ ] Screening result is printable (`window.print()`) and saved to the store.
-- [ ] `/dashboard/contacts` shows 21-day timeline, allows status updates and
-      template message preview.
-- [ ] `/dashboard/alerts` filters work, manual alert creation works,
-      acknowledge / resolve / reopen work.
-- [ ] `/dashboard/resources` allows inventory adjustment and AI forecast.
-- [ ] `/dashboard/reports` generates each of the 5 report kinds; report
-      detail is printable.
-- [ ] `/dashboard/ai` answers freeform questions and shortcut intents.
-- [ ] `/dashboard/command` shows risk corridors, cluster detection, sites.
-- [ ] `/dashboard/sites` lists all sites with status badges.
-- [ ] `/dashboard/settings` shows org, users, providers, risk weights, and
-      can export org data as JSON.
-- [ ] `/dashboard/audit` displays the audit log.
-- [ ] `/dashboard/demo-script` opens — and every step deep-links correctly.
+```bash
+npm test                # unit tests (risk scoring + permissions)
+npm run typecheck       # tsc --noEmit
+npm run build           # production build
+```
+
+CI runs all three on every push to `main` and every PR (`.github/workflows/ci.yml`).
+
+---
+
+## Architecture notes
+
+- `app/(marketing)/*` — public-facing site (no auth)
+- `app/dashboard/*` — authenticated command center (signed-cookie gated)
+- `app/api/*` — REST endpoints (auth, screenings, alerts, contacts, resources,
+  reports, AI, export, settings, sites, leads). Every mutation enforces a
+  `Capability` via `requireCapability()`.
+- `lib/store.ts` — multi-tenant in-process store. Every accessor and mutation
+  takes an `orgId`. Production swap-in is Supabase; data shapes match the
+  schema in `supabase/schema.sql`.
+- `lib/permissions.ts` — central RBAC matrix.
+- `lib/auth.ts` — HMAC-signed sessions; `requireSession()` / `requireCapability()`.
+- `lib/ratelimit.ts` — per-IP token-bucket; swap for `@upstash/ratelimit` for
+  multi-instance deploys.
+- `lib/cache.ts` — TTL cache used by the dashboard AI briefing.
+- `lib/risk.ts` — explainable, transparent risk-tier engine; configurable
+  weights per org.
+- `lib/ai.ts` — provider-agnostic; deterministic fallback reads live org data.
+- `lib/pricing.ts` — single pricing function used by `/pricing` and `/roi`.
+
+---
+
+## Known limitations (be honest about these in sales conversations)
+
+These are intentional MVP limits. Each has a clear "real implementation" path.
+
+- **In-process store** persists across same-process requests but resets on a
+  Vercel cold start. Swap for Supabase (schema already exists) for durable
+  persistence.
+- **Password is `"demo"` for seeded accounts only.** New signups set their own
+  password (≥ 8 chars). In production, swap `verifyPassword` for bcrypt or
+  Supabase auth (one-file change in `lib/store.ts`).
+- **No email verification / password reset yet.** Available in enterprise
+  pilot deployments via Supabase auth.
+- **No SSO/SAML/OIDC yet.** Available in enterprise pilot via Supabase + WorkOS.
+- **No native PDF generator** — print/SITREP relies on `window.print()`. Wire
+  `@react-pdf/renderer` or server Puppeteer for native PDF.
+- **In-memory rate limit** is per-process. Swap for Upstash Redis (interface
+  identical) for multi-instance deploys.
+- **In-memory audit log** is wiped on restart. Move to Postgres / Supabase for
+  durability.
 
 ---
 
 ## Sales kit
 
 ### One-liner
-
-> OutbreakOS is the operations command center for outbreak response — airport
+> Operational health-security infrastructure for high-risk workforces —
 > screening, contact monitoring, resource logistics, AI briefings — without
 > ever pretending to be a diagnostic tool.
 
-### Enterprise outreach email (template)
+### Mining / industrial pitch (primary)
+> Mining operators have a CFO who knows what one day of unplanned shutdown
+> costs. OutbreakOS protects that day. Site-entry screening, daily check-ins
+> for returning rotations, PPE logistics, branded board-grade SITREPs.
+> Operational, explainable, auditable.
 
-> Subject: Operational outbreak command center — 72-hour deployment
+### Enterprise outreach email (template)
+> Subject: Health-security operations platform for [Company] sites
 >
 > Dear {{name}},
 >
-> We work with airport authorities, mining operators, hospitals, and ministries
-> who need a single operational picture during outbreak response. OutbreakOS
-> gives your teams: traveler / worker screening with explainable risk tiers,
-> 21-day contact monitoring, PPE and resource logistics, AI-assisted SITREPs,
-> and a boardroom-grade multi-site command view.
+> Mining and industrial operators with cross-border workforce movement face
+> the most expensive form of risk: unplanned shutdown. OutbreakOS gives your
+> HSE and operations leads site-entry screening with explainable risk tiers,
+> 21-day contact monitoring, PPE / sample-kit logistics with days-of-cover
+> alerts, and AI-assisted board briefings — none of which claim to diagnose
+> disease.
 >
 > We have an Emergency Deployment Package that stands up a fully configured
 > tenant within 72 hours, with branded SITREPs and screener training.
@@ -181,40 +201,25 @@ components for dashboard data.
 > {{your_name}}
 
 ### Grant / contract positioning
-
-OutbreakOS is positioned as **operational infrastructure** for outbreak
-response. It complements (and never replaces) WHO / CDC / ministry clinical
-guidance. It is appropriate for grant funding under:
-
-- Cross-border health-security coordination
-- Point-of-entry screening capacity strengthening
-- Contact monitoring capability building
-- Workforce protection in extractive industries
-- Donor reporting and accountability
+OutbreakOS is positioned as **operational infrastructure**. It complements
+(never replaces) WHO / CDC / ministry clinical guidance. Appropriate for grant
+funding under: cross-border health-security coordination, point-of-entry
+screening capacity strengthening, contact monitoring capability building,
+workforce protection in extractive industries, donor reporting and
+accountability.
 
 ---
-
-## Architecture notes
-
-- `app/(marketing)/*` — public-facing site (no auth)
-- `app/dashboard/*` — authenticated command center (cookie-gated)
-- `app/api/*` — REST endpoints (auth, screenings, alerts, contacts, resources,
-  reports, AI, export, leads)
-- `lib/store.ts` — in-memory server store. Swap for Supabase in production.
-- `lib/risk.ts` — transparent, explainable rule-based risk scoring
-- `lib/ai.ts` — provider-agnostic AI with deterministic fallback
-- `supabase/schema.sql` — production schema with RLS
-- `middleware.ts` — protects `/dashboard/*` routes
 
 ## Safety & compliance
 
 OutbreakOS:
 
-- is **not** a medical device,
-- does **not** diagnose disease,
-- does **not** replace clinical judgment,
-- requires **human review** for every AI output,
-- maintains an immutable **audit log** of operational actions,
-- enforces **multi-tenant isolation** at the database row level.
+- is **not** a medical device
+- does **not** diagnose disease or determine infection status
+- does **not** replace clinical judgment
+- requires **human review** for every AI output
+- maintains an immutable **audit log** of operational actions
+- enforces **multi-tenant isolation** at the data and capability layers
+- exposes no fake integrations — only providers that are actually configured
 
-See `/compliance` and `/security` in the running app for full statements.
+See `/compliance` and `/security` for full live-vs-roadmap statements.

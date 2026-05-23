@@ -1,9 +1,7 @@
 import Link from "next/link";
 import {
   ActivitySquare,
-  AlertTriangle,
   ArrowRight,
-  Bell,
   Boxes,
   ClipboardCheck,
   FileText,
@@ -18,14 +16,83 @@ import { RiskPill, SeverityPill } from "@/components/ui/status-pill";
 import { NotADiagnosticBanner } from "@/components/ui/disclaimer";
 import { ScreeningChart } from "@/components/charts/screening-chart";
 import { RegionList } from "@/components/charts/region-list";
-import { db } from "@/lib/store";
-import { aiCommand } from "@/lib/ai";
+import { OnboardingChecklist } from "@/components/app/onboarding-checklist";
+import { AIRefreshButton } from "@/components/app/ai-refresh";
+import { data } from "@/lib/store";
+import { aiBriefingCached } from "@/lib/ai";
+import { requireSession } from "@/lib/auth";
 import { compactNumber, formatDateTime, relativeTime } from "@/lib/utils";
 import { DEMO_TIMESERIES, DEMO_RISK_BREAKDOWN } from "@/lib/demo-data";
 
 export default async function DashboardPage() {
-  const d = db();
-  const totals = d.regions.reduce(
+  const sess = requireSession();
+  const orgId = sess.orgId;
+  const org = data.org(orgId)!;
+  const regions = data.regions(orgId);
+  const sites = data.sites(orgId);
+  const screenings = data.screenings(orgId);
+  const contacts = data.contacts(orgId);
+  const resources = data.resources(orgId);
+  const alerts = data.alerts(orgId);
+  const audit = data.audit(orgId);
+  const reports = data.reports(orgId);
+
+  const isDemoOrg = orgId === "org_demo";
+
+  // New tenant with no data? Show onboarding checklist and skip the heavy
+  // dashboard so they aren't staring at zeros.
+  const isEmpty = sites.length === 0 && screenings.length === 0;
+  if (isEmpty) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Welcome to {org.name}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Five quick steps and you're ready to run operations from this command center.
+          </p>
+        </div>
+        <OnboardingChecklist
+          steps={[
+            {
+              done: sites.length > 0,
+              label: "Add your first site",
+              href: "/dashboard/sites",
+              cta: "Add site",
+            },
+            {
+              done: data.users(orgId).length > 1,
+              label: "Invite your team",
+              href: "/dashboard/settings",
+              cta: "Open settings",
+            },
+            {
+              done: false,
+              label: "Configure operational risk weights",
+              href: "/dashboard/settings",
+              cta: "Configure",
+            },
+            {
+              done: screenings.length > 0,
+              label: "Run a test screening",
+              href: "/dashboard/screenings/new",
+              cta: "Run",
+            },
+            {
+              done: reports.length > 0,
+              label: "Generate your first SITREP",
+              href: "/dashboard/reports",
+              cta: "Generate",
+            },
+          ]}
+        />
+        <NotADiagnosticBanner />
+      </div>
+    );
+  }
+
+  const totals = regions.reduce(
     (acc, r) => ({
       confirmed: acc.confirmed + r.confirmed,
       suspected: acc.suspected + r.suspected,
@@ -35,27 +102,23 @@ export default async function DashboardPage() {
     { confirmed: 0, suspected: 0, deaths: 0, contacts: 0 },
   );
 
-  const openAlerts = d.alerts.filter((a) => a.status === "open");
-  const urgentScreenings = d.screenings.filter((s) => s.risk === "urgent").length;
-  const lowStockCount = d.resources.filter((r) => r.onHand < r.minStock).length;
-  const screened24 = d.screenings.length;
-  const activeContacts = d.contacts.filter((c) => c.status === "active").length;
+  const openAlerts = alerts.filter((a) => a.status === "open");
+  const urgentScreenings = screenings.filter((s) => s.risk === "urgent").length;
+  const lowStockCount = resources.filter((r) => r.onHand < r.minStock).length;
+  const activeContacts = contacts.filter((c) => c.status === "active").length;
 
-  const aiSummary = await aiCommand({
-    intent: "briefing",
-    user: "Generate a short, executive-grade situational briefing for the dashboard.",
-  });
+  // Cached AI summary — does NOT run on every dashboard load.
+  const aiSummary = await aiBriefingCached(orgId);
 
-  const recentActivity = d.audit.slice(0, 8);
+  const recentActivity = audit.slice(0, 8);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Operations Overview</h1>
           <p className="text-muted-foreground text-sm">
-            {d.org.name} · {formatDateTime(new Date())}
+            {org.name} · {formatDateTime(new Date())}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -71,27 +134,24 @@ export default async function DashboardPage() {
           </Link>
           <Link href="/dashboard/ai">
             <Button variant="outline">
-              <TrendingUp className="h-4 w-4" /> AI brief
+              <TrendingUp className="h-4 w-4" /> AI command
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Stat row */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Confirmed" value={totals.confirmed} delta="+3 (48h)" trend="up" intent="critical" />
-        <StatCard label="Suspected" value={totals.suspected} delta="+6 (48h)" trend="up" intent="warning" />
-        <StatCard label="Deaths" value={totals.deaths} delta="+1 (48h)" trend="up" intent="critical" />
-        <StatCard label="Contacts monitored" value={totals.contacts} delta="+18 (48h)" trend="up" />
-        <StatCard label="Screenings (window)" value={compactNumber(screened24 + 1838)} delta="+9%" trend="up" />
-        <StatCard label="Urgent flags" value={urgentScreenings} intent={urgentScreenings ? "critical" : "default"} />
+        <StatCard label="Confirmed" value={totals.confirmed} intent={totals.confirmed > 0 ? "critical" : "default"} />
+        <StatCard label="Suspected" value={totals.suspected} intent={totals.suspected > 0 ? "warning" : "default"} />
+        <StatCard label="Deaths" value={totals.deaths} intent={totals.deaths > 0 ? "critical" : "default"} />
+        <StatCard label="Contacts monitored" value={totals.contacts} />
+        <StatCard label="Screenings (window)" value={compactNumber(screenings.length + (isDemoOrg ? 1838 : 0))} />
+        <StatCard label="Urgent operational flags" value={urgentScreenings} intent={urgentScreenings ? "critical" : "default"} />
       </div>
 
       <NotADiagnosticBanner />
 
-      {/* Main grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Screening volume chart */}
         <Card className="xl:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <div>
@@ -111,17 +171,20 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* AI exec summary */}
         <Card className="bg-gradient-to-br from-card to-primary/5 border-primary/20">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-md bg-primary/15 text-primary flex items-center justify-center">
-                <TrendingUp className="h-4 w-4" />
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-md bg-primary/15 text-primary flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
+                <CardTitle>AI operational briefing</CardTitle>
               </div>
-              <CardTitle>AI executive summary</CardTitle>
+              <AIRefreshButton />
             </div>
             <p className="text-xs text-muted-foreground">
-              Provider: <code className="text-primary">{aiSummary.provider}</code> · Human review required.
+              Provider <code className="text-primary">{aiSummary.provider}</code>
+              {aiSummary.cached && " · cached"} · human review required.
             </p>
           </CardHeader>
           <CardContent>
@@ -137,14 +200,14 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Second row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Cases by region */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <div>
-              <CardTitle>Cases by region</CardTitle>
-              <p className="text-xs text-muted-foreground">Confirmed, suspected, deaths, and contacts under monitoring.</p>
+              <CardTitle>Operational picture by region</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Confirmed, suspected, deaths, and contacts under monitoring.
+              </p>
             </div>
             <Link href="/dashboard/map">
               <Button variant="ghost" size="sm">
@@ -153,11 +216,10 @@ export default async function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <RegionList regions={d.regions} />
+            <RegionList regions={regions} />
           </CardContent>
         </Card>
 
-        {/* Open alerts */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Open alerts</CardTitle>
@@ -169,7 +231,9 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {openAlerts.length === 0 && (
-              <p className="text-sm text-muted-foreground">No open alerts. Operations nominal.</p>
+              <p className="text-sm text-muted-foreground">
+                No open alerts. Operations nominal.
+              </p>
             )}
             {openAlerts.slice(0, 5).map((a) => (
               <Link
@@ -181,24 +245,30 @@ export default async function DashboardPage() {
                   <p className="text-sm font-medium line-clamp-1">{a.title}</p>
                   <SeverityPill severity={a.severity} />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{a.description}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{relativeTime(a.createdAt)}</p>
+                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                  {a.description}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {relativeTime(a.createdAt)}
+                </p>
               </Link>
             ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Third row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* High-risk flags */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>High-risk flags</CardTitle>
-            <Link href="/dashboard/screenings"><Button variant="ghost" size="sm">All <ArrowRight className="h-3 w-3" /></Button></Link>
+            <CardTitle>High-tier operational flags</CardTitle>
+            <Link href="/dashboard/screenings">
+              <Button variant="ghost" size="sm">
+                All <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent className="space-y-2">
-            {d.screenings
+            {screenings
               .filter((s) => s.risk === "urgent" || s.risk === "elevated")
               .slice(0, 4)
               .map((s) => (
@@ -214,17 +284,25 @@ export default async function DashboardPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {s.context.replace("_", " ")} · {s.originRegion} → {s.destination}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">{relativeTime(s.createdAt)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {relativeTime(s.createdAt)}
+                  </p>
                 </Link>
               ))}
+            {screenings.filter((s) => s.risk === "urgent" || s.risk === "elevated").length === 0 && (
+              <p className="text-sm text-muted-foreground">No high-tier flags in window.</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Contact monitoring */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Contacts under monitoring</CardTitle>
-            <Link href="/dashboard/contacts"><Button variant="ghost" size="sm">All <ArrowRight className="h-3 w-3" /></Button></Link>
+            <Link href="/dashboard/contacts">
+              <Button variant="ghost" size="sm">
+                All <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
@@ -233,10 +311,12 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-3 space-y-1.5 text-xs">
               {(["active", "escalated", "cleared", "lost_to_follow_up"] as const).map((s) => {
-                const count = d.contacts.filter((c) => c.status === s).length;
+                const count = contacts.filter((c) => c.status === s).length;
                 return (
                   <div key={s} className="flex justify-between">
-                    <span className="text-muted-foreground capitalize">{s.replace(/_/g, " ")}</span>
+                    <span className="text-muted-foreground capitalize">
+                      {s.replace(/_/g, " ")}
+                    </span>
                     <span className="font-medium tabular-nums">{count}</span>
                   </div>
                 );
@@ -250,11 +330,14 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Resource status */}
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>PPE & resource status</CardTitle>
-            <Link href="/dashboard/resources"><Button variant="ghost" size="sm">All <ArrowRight className="h-3 w-3" /></Button></Link>
+            <CardTitle>Resource status</CardTitle>
+            <Link href="/dashboard/resources">
+              <Button variant="ghost" size="sm">
+                All <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
@@ -262,7 +345,7 @@ export default async function DashboardPage() {
               <span className="text-xs text-muted-foreground">items below threshold</span>
             </div>
             <div className="mt-3 space-y-2">
-              {d.resources
+              {resources
                 .filter((r) => r.onHand < r.minStock)
                 .slice(0, 3)
                 .map((r) => (
@@ -286,7 +369,6 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent activity */}
       <Card>
         <CardHeader>
           <CardTitle>Recent activity</CardTitle>
@@ -310,6 +392,11 @@ export default async function DashboardPage() {
                 </span>
               </li>
             ))}
+            {recentActivity.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4">
+                No activity yet. Run a screening to populate the audit trail.
+              </p>
+            )}
           </ul>
         </CardContent>
       </Card>
