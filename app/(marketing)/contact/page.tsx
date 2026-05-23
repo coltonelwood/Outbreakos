@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { PageHero } from "@/components/marketing/page-hero";
 import { ContactForm } from "./contact-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,9 @@ export default function ContactPage() {
               <CardTitle>Request a demo or pilot</CardTitle>
             </CardHeader>
             <CardContent>
-              <ContactForm />
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Loading form…</p>}>
+                <ContactForm />
+              </Suspense>
             </CardContent>
           </Card>
         </div>

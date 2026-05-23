@@ -209,5 +209,10 @@ export interface OrgSettings {
     hcw: number;
     funeral: number;
   };
+  riskThresholds: { monitor: number; elevated: number; urgent: number };
   apiKeysMasked: { name: string; lastFour: string }[];
+  onboarding: {
+    dismissed: boolean;
+    completedSteps: string[];
+  };
 }

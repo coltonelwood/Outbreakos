@@ -791,10 +791,9 @@ export const DEMO_SETTINGS: OrgSettings = {
     hcw: 15,
     funeral: 20,
   },
-  apiKeysMasked: [
-    { name: "Reporting Webhook", lastFour: "9f2c" },
-    { name: "Lab Integration", lastFour: "11ab" },
-  ],
+  riskThresholds: { monitor: 15, elevated: 40, urgent: 70 },
+  apiKeysMasked: [],
+  onboarding: { dismissed: true, completedSteps: ["site", "user", "risk", "screening", "report"] },
 };
 
 // Screening time-series for dashboard chart

@@ -24,7 +24,8 @@ export type Capability =
   | "audit.read"
   | "audit.export"
   | "org.export"
-  | "ai.invoke";
+  | "ai.invoke"
+  | "lead.read";
 
 const matrix: Record<Role, Capability[]> = {
   viewer: [
@@ -106,6 +107,7 @@ const matrix: Record<Role, Capability[]> = {
     "audit.export",
     "org.export",
     "ai.invoke",
+    "lead.read",
   ],
 };
 

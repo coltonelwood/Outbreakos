@@ -1,6 +1,9 @@
-// In-process token-bucket rate limiter. Survives across requests in the same
-// process; for multi-instance deployment swap in @upstash/ratelimit (the
-// interface is intentionally identical to ease migration).
+// Rate limiter with two backends:
+// - In-process token bucket (default — survives within one Node process)
+// - Upstash Redis (when UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are
+//   set — multi-instance safe)
+//
+// Both expose the same async result shape so call sites don't change.
 
 interface Bucket {
   tokens: number;
@@ -17,6 +20,74 @@ export interface LimitResult {
   retryAfterSec: number;
 }
 
+// ---------------------------------------------------------------------------
+// Upstash adapter — lazy-loaded so the package isn't required at runtime
+// when no Redis is configured.
+// ---------------------------------------------------------------------------
+
+type UpstashRatelimit = {
+  limit: (
+    key: string,
+  ) => Promise<{ success: boolean; remaining: number; reset: number }>;
+};
+
+const upstashCache = new Map<string, UpstashRatelimit>();
+let upstashRedis: unknown = null;
+
+function getUpstashRatelimit(opts: { limit: number; windowSec: number }): UpstashRatelimit | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const cacheKey = `${opts.limit}:${opts.windowSec}`;
+  const cached = upstashCache.get(cacheKey);
+  if (cached) return cached;
+  try {
+    // Require synchronously to avoid bundler edge-cases in API route runtime.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Redis } = require("@upstash/redis");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Ratelimit } = require("@upstash/ratelimit");
+    if (!upstashRedis) upstashRedis = new Redis({ url, token });
+    const rl = new Ratelimit({
+      redis: upstashRedis as object,
+      limiter: Ratelimit.slidingWindow(opts.limit, `${opts.windowSec} s`),
+      analytics: false,
+      prefix: "outbreakos",
+    });
+    upstashCache.set(cacheKey, rl);
+    return rl;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API — async so an Upstash backend can plug in transparently.
+// ---------------------------------------------------------------------------
+
+export async function rateLimitAsync(
+  key: string,
+  opts: { limit: number; windowSec: number },
+): Promise<LimitResult> {
+  const up = getUpstashRatelimit(opts);
+  if (up) {
+    try {
+      const r = await up.limit(key);
+      const retryMs = Math.max(0, r.reset - Date.now());
+      return {
+        ok: r.success,
+        remaining: r.remaining,
+        retryAfterSec: Math.ceil(retryMs / 1000),
+      };
+    } catch {
+      // Fall through to local on Upstash failure rather than 500-ing the request.
+    }
+  }
+  return rateLimit(key, opts);
+}
+
+// Synchronous in-process token bucket (kept for backward compat with existing
+// callers; new code should prefer rateLimitAsync).
 export function rateLimit(
   key: string,
   opts: { limit: number; windowSec: number },
@@ -53,7 +124,7 @@ export function rateLimitResponse(r: LimitResult) {
       status: 429,
       headers: {
         "Content-Type": "application/json",
-        "Retry-After": String(r.retryAfterSec),
+        "Retry-After": String(r.retryAfterSec || 1),
       },
     },
   );

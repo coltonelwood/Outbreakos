@@ -148,23 +148,75 @@ CI runs all three on every push to `main` and every PR (`.github/workflows/ci.ym
 
 ## Known limitations (be honest about these in sales conversations)
 
-These are intentional MVP limits. Each has a clear "real implementation" path.
+### Live in this build
+- **Passwords are bcrypt-hashed** (cost factor 10). Demo accounts use the
+  pre-computed hash of `"demo"`; new signups hash their own ≥8-char password.
+- **Native PDF report generator** at `/api/reports/[id]/pdf` (react-pdf,
+  branded header, footer, disclaimer block).
+- **Rate limiter has Upstash Redis adapter** — set `UPSTASH_REDIS_REST_URL`
+  and `UPSTASH_REDIS_REST_TOKEN` and it switches transparently; otherwise
+  uses an in-process token bucket.
+- **Lead capture persists** to in-memory store, Slack-notified, and visible
+  at `/dashboard/leads` (owner-only).
+- **Lead form captures UTM** (`utm_source`, `utm_medium`, `utm_campaign`,
+  `utm_content`, `utm_term`, plus `document.referrer`).
+- **Configurable per-org risk thresholds** alongside the weights, both audited.
+- **Onboarding completion persists** per-tenant in `org_settings.onboarding`.
+- **Toast notifications + skip-to-content + dashboard error boundary +
+  loading skeleton** in place.
+- **`/api/health`** returns backend status for uptime monitors.
+- **AI chat renders structured markdown with inline citation chips**
+  (highlighted when matched against the actual `citations` array).
 
-- **In-process store** persists across same-process requests but resets on a
-  Vercel cold start. Swap for Supabase (schema already exists) for durable
-  persistence.
-- **Password is `"demo"` for seeded accounts only.** New signups set their own
-  password (≥ 8 chars). In production, swap `verifyPassword` for bcrypt or
-  Supabase auth (one-file change in `lib/store.ts`).
-- **No email verification / password reset yet.** Available in enterprise
-  pilot deployments via Supabase auth.
-- **No SSO/SAML/OIDC yet.** Available in enterprise pilot via Supabase + WorkOS.
-- **No native PDF generator** — print/SITREP relies on `window.print()`. Wire
-  `@react-pdf/renderer` or server Puppeteer for native PDF.
-- **In-memory rate limit** is per-process. Swap for Upstash Redis (interface
-  identical) for multi-instance deploys.
-- **In-memory audit log** is wiped on restart. Move to Postgres / Supabase for
-  durability.
+### Honest gaps — work that was started but not finished in this batch
+- **Supabase data layer swap is NOT live.** The schema (`supabase/schema.sql`,
+  now includes `leads` and `user_credentials`), the seed, the migration
+  runner (`npm run db:migrate`), and the server client factory
+  (`lib/supabase/server.ts`) are all in place. The remaining work — making
+  every `data.*` accessor and mutation function `async` and adding `await`
+  at every call site (~25 files) — is documented step-by-step in
+  `supabase/SWAP.md`. Estimated 6-8 hours with an integration environment.
+  Until then, cold starts on Vercel reset the in-memory store.
+
+### Still deferred to future batches
+- **Email verification + password reset** — via Supabase Auth post-swap.
+- **SSO / SAML / OIDC** — via Supabase + WorkOS for the first pilot.
+- **SCIM provisioning** — roadmap.
+- **SOC 2 Type II** — roadmap.
+- **Realtime updates** (other tabs go stale after mutations) — needs Supabase
+  channels post-swap.
+- **Bulk SMS check-in send** — Twilio adapter wired in `MESSAGING_PROVIDER`
+  abstraction but no send loop yet.
+- **Twilio inbound webhook receiver** — `/api/webhooks/twilio` not built.
+- **Map marker clustering** — `leaflet.markercluster` is installed but not
+  wired into `app/dashboard/map/leaflet-map.tsx` yet.
+- **Global `⌘K` command palette** — not implemented.
+- **`i18n` (French + Portuguese)** — not implemented; required for DRC,
+  francophone West Africa, Brazil, Mozambique.
+- **Field-mode (tablet-friendly) screening UI** — not implemented.
+- **Days-of-cover projection chart** on resources — not implemented.
+- **Email + CRM forwarding for `/api/leads`** — Slack-only today.
+
+---
+
+## Next 30-day roadmap (updated)
+
+**Week 1** — Complete the Supabase data-layer swap per `supabase/SWAP.md`.
+Move the audit log and leads from in-memory to their Postgres tables.
+
+**Week 2** — Email verification + password reset via Supabase Auth. SSO via
+Supabase + WorkOS for the first pilot customer. DPA template + sub-processors
+page.
+
+**Week 3** — Realtime updates via Supabase channels. Map marker clustering
+wired in (`leaflet.markercluster` package is already installed). Twilio bulk
+SMS check-in send + `/api/webhooks/twilio` inbound receiver. Email and CRM
+(HubSpot/Pipedrive) forwarding from `/api/leads`.
+
+**Week 4** — `i18n` (English + French + Portuguese) via `next-intl`. Mobile
+field-mode UI for tablet-based screening. Global `⌘K` command palette.
+Days-of-cover projection chart on resources. Reach three signed mining
+pilots.
 
 ---
 

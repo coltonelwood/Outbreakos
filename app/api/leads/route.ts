@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { addLead, logAudit } from "@/lib/store";
-import { clientKey, rateLimit, rateLimitResponse } from "@/lib/ratelimit";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 
 const schema = z.object({
   email: z.string().email(),
@@ -12,6 +12,7 @@ const schema = z.object({
   intent: z.string().max(60).optional(),
   message: z.string().max(4000).optional(),
   source: z.string().max(120).optional(),
+  utm: z.record(z.string().max(500)).optional(),
   // honeypot — bots fill, humans don't
   website: z.string().max(0).optional(),
 });
@@ -42,7 +43,7 @@ async function notifySlack(payload: Record<string, unknown>) {
 }
 
 export async function POST(req: Request) {
-  const limit = rateLimit(clientKey(req, "leads"), { limit: 5, windowSec: 600 });
+  const limit = await rateLimitAsync(clientKey(req, "leads"), { limit: 5, windowSec: 600 });
   if (!limit.ok) return rateLimitResponse(limit);
 
   const body = await req.json().catch(() => null);
@@ -63,9 +64,15 @@ export async function POST(req: Request) {
     intent: parsed.data.intent,
     message: parsed.data.message,
     source: parsed.data.source || "web",
+    utm: parsed.data.utm,
   });
-  await notifySlack(parsed.data);
-  // Audited globally; owner-side review surface coming in /dashboard/leads.
-  logAudit("global", "public", "lead.create", lead.id, { audience: parsed.data.audience });
+  // Fire-and-forget so the user gets a fast response even if Slack is slow.
+  notifySlack(parsed.data).catch(() => {});
+  // Audited globally; owner-side review surface is /dashboard/leads.
+  logAudit("global", "public", "lead.create", lead.id, {
+    audience: parsed.data.audience,
+    intent: parsed.data.intent,
+    utm: parsed.data.utm,
+  });
   return NextResponse.json({ ok: true, leadId: lead.id });
 }

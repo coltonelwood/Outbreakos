@@ -13,6 +13,7 @@ import {
   Cog,
   FileText,
   Home,
+  Inbox,
   Map,
   Menu,
   ScrollText,
@@ -64,6 +65,7 @@ const groups: NavGroup[] = [
       { href: "/dashboard/sites", label: "Sites", icon: Building2, requires: "settings.read" },
       { href: "/dashboard/settings", label: "Settings", icon: Cog, requires: "settings.read" },
       { href: "/dashboard/audit", label: "Audit Log", icon: ScrollText, requires: "audit.read" },
+      { href: "/dashboard/leads", label: "Leads", icon: Inbox, requires: "lead.read" },
     ],
   },
   {

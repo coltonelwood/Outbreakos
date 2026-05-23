@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, logAudit, verifyPassword } from "@/lib/store";
 import { setSession } from "@/lib/auth";
-import { clientKey, rateLimit, rateLimitResponse } from "@/lib/ratelimit";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 
 const schema = z.object({
   email: z.string().email(),
@@ -10,7 +10,7 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-  const limit = rateLimit(clientKey(req, "login"), { limit: 5, windowSec: 60 });
+  const limit = await rateLimitAsync(clientKey(req, "login"), { limit: 5, windowSec: 60 });
   if (!limit.ok) return rateLimitResponse(limit);
 
   const body = await req.json().catch(() => null);

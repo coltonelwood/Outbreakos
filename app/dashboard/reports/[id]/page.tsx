@@ -27,7 +27,13 @@ export default function ReportDetail({ params }: { params: { id: string } }) {
         </Link>
         <div className="flex gap-2">
           <RegenerateButton kind={r.kind} />
-          <PrintButton label="Print / save PDF" />
+          <a
+            href={`/api/reports/${r.id}/pdf`}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            Download PDF
+          </a>
+          <PrintButton label="Print" />
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { aiCommand } from "@/lib/ai";
 import { logAudit } from "@/lib/store";
 import { authErrorResponse, requireCapability } from "@/lib/auth";
-import { clientKey, rateLimit, rateLimitResponse } from "@/lib/ratelimit";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 import { invalidate } from "@/lib/cache";
 
 export async function POST(req: Request) {
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     return authErrorResponse(e);
   }
   // Tight limit on AI to control cost and abuse.
-  const limit = rateLimit(clientKey(req, `ai:${sess.orgId}`), { limit: 20, windowSec: 60 });
+  const limit = await rateLimitAsync(clientKey(req, `ai:${sess.orgId}`), { limit: 20, windowSec: 60 });
   if (!limit.ok) return rateLimitResponse(limit);
 
   const body = await req.json().catch(() => ({}));

@@ -12,10 +12,27 @@ const riskWeights = z.object({
   funeral: z.number().int().min(0).max(100),
 });
 
+const riskThresholds = z
+  .object({
+    monitor: z.number().int().min(0).max(500),
+    elevated: z.number().int().min(0).max(500),
+    urgent: z.number().int().min(0).max(500),
+  })
+  .refine((t) => t.monitor < t.elevated && t.elevated < t.urgent, {
+    message: "Thresholds must be strictly ascending: monitor < elevated < urgent",
+  });
+
+const onboarding = z.object({
+  dismissed: z.boolean().optional(),
+  completedSteps: z.array(z.string().max(40)).max(20).optional(),
+});
+
 const schema = z.object({
   riskWeights: riskWeights.optional(),
+  riskThresholds: riskThresholds.optional(),
   aiProvider: z.enum(["openai", "anthropic", "none"]).optional(),
   messagingProvider: z.enum(["twilio", "whatsapp", "none"]).optional(),
+  onboarding: onboarding.optional(),
 });
 
 export async function PATCH(req: Request) {

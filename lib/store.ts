@@ -19,6 +19,7 @@ import {
   DEMO_SITES,
   DEMO_USERS,
 } from "./demo-data";
+import bcrypt from "bcryptjs";
 import type {
   Alert,
   AuditEvent,
@@ -45,6 +46,7 @@ export interface Lead {
   intent?: string;
   message?: string;
   source: string;
+  utm?: Record<string, string>;
   createdAt: string;
 }
 
@@ -69,12 +71,17 @@ interface Db {
 
 const g = globalThis as unknown as { __outbreakos_db?: Db };
 
+// Pre-computed bcrypt hash of the seeded password "demo" so the demo accounts
+// work without paying the bcrypt cost on every cold start. Generated once with
+// bcrypt.hashSync("demo", 10).
+const DEMO_PASSWORD_HASH = "$2b$10$ED/EieG.N/CxSMaULD5Lk.Svcg1Xo3gi7U60ICo11ri5uoe88Zor6";
+
 function freshDb(): Db {
   const passwords = new Map<string, string>();
-  // The five seeded demo accounts share the password "demo" so the platform
-  // ships in a usable state. Newly-signed-up users get their own (bcrypted
-  // in production) credentials and never see this map.
-  for (const u of DEMO_USERS) passwords.set(u.id, "demo");
+  // The five seeded demo accounts share the bcrypt hash of "demo" so the
+  // platform ships in a usable state. Newly-signed-up users get their own
+  // bcrypt hash and never see this seed.
+  for (const u of DEMO_USERS) passwords.set(u.id, DEMO_PASSWORD_HASH);
   return {
     orgs: [structuredClone(DEMO_ORG)],
     users: structuredClone(DEMO_USERS),
@@ -135,7 +142,9 @@ function defaultSettings(orgId: string): OrgSettings {
       hcw: 15,
       funeral: 20,
     },
+    riskThresholds: { monitor: 15, elevated: 40, urgent: 70 },
     apiKeysMasked: [],
+    onboarding: { dismissed: false, completedSteps: [] },
   };
 }
 
@@ -193,15 +202,17 @@ export function createUser(
     ...profile,
   };
   db().users.unshift(user);
-  // NOTE: in production this is a bcrypt hash via Supabase auth. In demo
-  // mode we hold the raw password to keep the seeded flow working without
-  // external dependencies.
-  db().passwords.set(user.id, password);
+  // bcrypt cost factor 10 ≈ ~80ms on a modern CPU; tolerable at signup time.
+  const hash = bcrypt.hashSync(password, 10);
+  db().passwords.set(user.id, hash);
   return user;
 }
 
 export function verifyPassword(userId: string, password: string): boolean {
-  return db().passwords.get(userId) === password;
+  const hash = db().passwords.get(userId);
+  if (!hash) return false;
+  // bcrypt.compareSync is constant-time and resistant to timing attacks.
+  return bcrypt.compareSync(password, hash);
 }
 
 export function addScreening(
@@ -372,9 +383,18 @@ export function updateSite(
   return s;
 }
 
+type SettingsPatch = {
+  aiProvider?: OrgSettings["aiProvider"];
+  messagingProvider?: OrgSettings["messagingProvider"];
+  riskWeights?: OrgSettings["riskWeights"];
+  riskThresholds?: OrgSettings["riskThresholds"];
+  apiKeysMasked?: OrgSettings["apiKeysMasked"];
+  onboarding?: Partial<OrgSettings["onboarding"]>;
+};
+
 export function updateSettings(
   orgId: string,
-  patch: Partial<OrgSettings>,
+  patch: SettingsPatch,
   actor: string,
 ) {
   let s = db().settings.find((x) => x.orgId === orgId);
@@ -382,8 +402,18 @@ export function updateSettings(
     s = defaultSettings(orgId);
     db().settings.push(s);
   }
-  Object.assign(s, patch, { orgId });
-  logAudit(orgId, actor, "settings.update", "settings", patch);
+  if (patch.aiProvider) s.aiProvider = patch.aiProvider;
+  if (patch.messagingProvider) s.messagingProvider = patch.messagingProvider;
+  if (patch.riskWeights) s.riskWeights = patch.riskWeights;
+  if (patch.riskThresholds) s.riskThresholds = patch.riskThresholds;
+  if (patch.apiKeysMasked) s.apiKeysMasked = patch.apiKeysMasked;
+  if (patch.onboarding) {
+    s.onboarding = {
+      dismissed: patch.onboarding.dismissed ?? s.onboarding.dismissed,
+      completedSteps: patch.onboarding.completedSteps ?? s.onboarding.completedSteps,
+    };
+  }
+  logAudit(orgId, actor, "settings.update", "settings", patch as Record<string, unknown>);
   return s;
 }
 

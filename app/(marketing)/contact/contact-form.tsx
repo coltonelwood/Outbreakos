@@ -1,25 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { CheckCircle2 } from "lucide-react";
 
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
+
 export function ContactForm() {
+  const search = useSearchParams();
+  const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [intentDefault, setIntentDefault] = useState("demo");
+
+  useEffect(() => {
+    // Pre-select intent from query (?intent=pilot/emergency/enterprise)
+    const i = search?.get("intent");
+    if (i && ["demo", "pilot", "emergency", "enterprise"].includes(i)) {
+      setIntentDefault(i);
+    }
+  }, [search]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
-    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-    await fetch("/api/leads", {
+    const fd = new FormData(e.currentTarget);
+    const data: Record<string, string> = Object.fromEntries(fd.entries()) as Record<string, string>;
+    // Capture UTM + referrer client-side and bundle them into the payload.
+    const utm: Record<string, string> = {};
+    if (search) {
+      for (const k of UTM_KEYS) {
+        const v = search.get(k);
+        if (v) utm[k] = v;
+      }
+    }
+    if (typeof document !== "undefined" && document.referrer) {
+      utm.referrer = document.referrer.slice(0, 500);
+    }
+    const r = await fetch("/api/leads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).catch(() => {});
+      body: JSON.stringify({
+        ...data,
+        source: data.source || "contact-form",
+        utm,
+      }),
+    });
     setLoading(false);
-    setSubmitted(true);
+    if (r.ok) {
+      setSubmitted(true);
+      toast("Request received — we'll be in touch within one business day.", "success");
+    } else {
+      toast("Couldn't submit the form. Please try again or email us directly.", "error");
+    }
   }
 
   if (submitted) {
@@ -37,6 +73,15 @@ export function ContactForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
+      {/* Honeypot — bots fill this; humans don't see it. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        className="hidden"
+        aria-hidden
+      />
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="name">Full name</Label>
@@ -54,15 +99,15 @@ export function ContactForm() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="role">Role</Label>
-          <Input id="role" name="role" placeholder="e.g. Director of Operations" />
+          <Input id="role" name="role" placeholder="e.g. Director of HSE" />
         </div>
       </div>
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="audience">I am from</Label>
-          <Select id="audience" name="audience" defaultValue="airport">
-            <option value="airport">Airport / point of entry</option>
+          <Select id="audience" name="audience" defaultValue="mining">
             <option value="mining">Mining / industrial operator</option>
+            <option value="airport">Airport / point of entry</option>
             <option value="hospital">Hospital / clinic</option>
             <option value="government">Government / ministry</option>
             <option value="ngo">NGO / multilateral</option>
@@ -71,7 +116,7 @@ export function ContactForm() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="intent">Request type</Label>
-          <Select id="intent" name="intent" defaultValue="demo">
+          <Select id="intent" name="intent" defaultValue={intentDefault}>
             <option value="demo">Product demo</option>
             <option value="pilot">Pilot deployment</option>
             <option value="emergency">Emergency deployment (active situation)</option>

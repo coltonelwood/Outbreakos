@@ -3,7 +3,7 @@ import { z } from "zod";
 import { addScreening, data } from "@/lib/store";
 import { scoreScreening } from "@/lib/risk";
 import { authErrorResponse, requireCapability } from "@/lib/auth";
-import { clientKey, rateLimit, rateLimitResponse } from "@/lib/ratelimit";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 
 const schema = z.object({
   context: z.enum(["airport", "site_entry", "clinic"]),
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   } catch (e) {
     return authErrorResponse(e);
   }
-  const limit = rateLimit(clientKey(req, `scr:${sess.orgId}`), { limit: 60, windowSec: 60 });
+  const limit = await rateLimitAsync(clientKey(req, `scr:${sess.orgId}`), { limit: 60, windowSec: 60 });
   if (!limit.ok) return rateLimitResponse(limit);
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     .map((t) => t.trim())
     .filter(Boolean);
 
-  // Use org-configured weights.
+  // Use org-configured weights AND thresholds.
   const settings = data.settings(sess.orgId);
   const scored = scoreScreening(
     {
@@ -65,6 +65,7 @@ export async function POST(req: Request) {
       originRegion: v.originRegion,
     },
     settings.riskWeights,
+    settings.riskThresholds,
   );
 
   const subjectName =

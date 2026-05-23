@@ -208,6 +208,35 @@ create table if not exists reports (
 create index if not exists reports_org_id_idx on reports(org_id);
 
 -- ---------------------------------------------------------------------------
+-- Leads (global — sales / marketing intake; not tenant-scoped)
+-- ---------------------------------------------------------------------------
+create table if not exists leads (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  name text,
+  org text,
+  role text,
+  audience text,
+  intent text,
+  message text,
+  source text,
+  utm jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists leads_created_at_idx on leads(created_at desc);
+create index if not exists leads_email_idx on leads(lower(email));
+
+-- ---------------------------------------------------------------------------
+-- User credentials (only used when running our own auth — Supabase Auth
+-- replaces this. Kept for the demo / self-hosted path.)
+-- ---------------------------------------------------------------------------
+create table if not exists user_credentials (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  password_hash text not null,
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- Audit log
 -- ---------------------------------------------------------------------------
 create table if not exists audit_logs (
@@ -283,3 +312,10 @@ end $$;
 drop policy if exists tenant_org_select on organizations;
 create policy tenant_org_select on organizations for select to authenticated
   using (id = auth_org_id());
+
+-- Leads + user_credentials are intentionally NOT exposed via RLS to the
+-- authenticated role — they are accessed only via the service-role key
+-- from server-side code (lead capture API; auth endpoints).
+alter table leads enable row level security;
+alter table user_credentials enable row level security;
+-- No public select / insert policies; everything goes through the server.
