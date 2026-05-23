@@ -32,7 +32,7 @@ export function Topbar({ userName, userRole, openAlerts, mode }: TopbarProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/70 backdrop-blur">
-      <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-6">
+      <div className="flex h-14 items-center justify-between gap-4 pl-14 pr-4 lg:px-6">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[hsl(var(--success))]/15 text-[hsl(var(--success))] text-xs">
             <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />

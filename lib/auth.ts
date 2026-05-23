@@ -25,6 +25,7 @@ export function setSession(s: Session) {
   cookies().set(COOKIE_NAME, Buffer.from(JSON.stringify(s)).toString("base64"), {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });

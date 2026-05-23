@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -7,15 +8,17 @@ import {
   Bell,
   Boxes,
   Brain,
+  Building2,
   ClipboardCheck,
   Cog,
   FileText,
   Home,
   Map,
+  Menu,
+  ScrollText,
   ShieldAlert,
   Users,
-  ScrollText,
-  Building2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,16 +60,27 @@ const groups = [
 
 export function Sidebar({ orgName }: { orgName: string }) {
   const pathname = usePathname();
-  return (
-    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-border bg-card/40 h-screen sticky top-0">
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const NavContent = (
+    <>
       <div className="p-4 border-b border-border">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="relative">
-            <Activity className="h-5 w-5 text-primary" />
-            <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
-          </div>
-          <span className="font-bold">OutbreakOS</span>
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+            <div className="relative">
+              <Activity className="h-5 w-5 text-primary" />
+              <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
+            </div>
+            <span className="font-bold">OutbreakOS</span>
+          </Link>
+          <button
+            className="lg:hidden text-muted-foreground"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
         <div className="mt-2 text-xs text-muted-foreground truncate">{orgName}</div>
       </div>
       <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 space-y-6">
@@ -82,6 +96,7 @@ export function Sidebar({ orgName }: { orgName: string }) {
                   <Link
                     key={i.href}
                     href={i.href}
+                    onClick={() => setMobileOpen(false)}
                     className={cn(
                       "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors",
                       active
@@ -101,6 +116,38 @@ export function Sidebar({ orgName }: { orgName: string }) {
       <div className="p-4 border-t border-border text-[11px] text-muted-foreground">
         <p>OutbreakOS is an operational platform, not a medical diagnostic device.</p>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile trigger — fixed to the top-left, visible only on small screens */}
+      <button
+        className="lg:hidden fixed top-3 left-3 z-50 rounded-md border border-border bg-card/90 backdrop-blur p-2 text-foreground shadow-lg"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
+          <aside className="relative flex w-64 flex-col bg-card border-r border-border animate-fade-in">
+            {NavContent}
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-border bg-card/40 h-screen sticky top-0">
+        {NavContent}
+      </aside>
+    </>
   );
 }
