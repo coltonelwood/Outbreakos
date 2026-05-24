@@ -321,8 +321,13 @@ alter table notifications enable row level security;
 alter table set_password_tokens enable row level security;
 
 -- Helper: get org_id of the authenticated user.
+-- SECURITY DEFINER + fixed search_path so the internal read of `profiles`
+-- bypasses RLS — otherwise the profiles policy (which itself calls this
+-- function) recurses and the function returns NULL, blocking every tenant read.
 create or replace function auth_org_id() returns uuid
 language sql stable
+security definer
+set search_path = public
 as $$
   select org_id from profiles where id = auth.uid()
 $$;
