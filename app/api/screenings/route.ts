@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     .filter(Boolean);
 
   // Use org-configured weights AND thresholds.
-  const settings = data.settings(sess.orgId);
+  const settings = await data.settings(sess.orgId);
   const scored = scoreScreening(
     {
       symptoms,
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       .toString()
       .padStart(4, "0")}`;
 
-  const screening = addScreening(sess.orgId, sess.userId, {
+  const screening = await addScreening(sess.orgId, sess.userId, {
     siteId: v.siteId,
     context: v.context,
     subjectName,
@@ -100,9 +100,9 @@ export async function POST(req: Request) {
   // (and, for urgent, org admins/owners). Fire-and-forget so the screener's
   // request returns immediately; delivery is recorded + audited.
   if (scored.tier === "urgent" || scored.tier === "elevated") {
-    const officers = data
-      .users(sess.orgId)
-      .filter((u) => u.role === "health_officer" || (scored.tier === "urgent" && (u.role === "admin" || u.role === "owner")));
+    const officers = (await data.users(sess.orgId)).filter(
+      (u) => u.role === "health_officer" || (scored.tier === "urgent" && (u.role === "admin" || u.role === "owner")),
+    );
     const subject = `${scored.tier.toUpperCase()} operational tier — ${subjectName}`;
     const body = `${v.context.replace("_", " ")} screening. Action: ${scored.action} (operational triage, not a diagnosis; human review required).`;
     void notifyEvent({
@@ -124,5 +124,5 @@ export async function GET() {
   } catch (e) {
     return authErrorResponse(e);
   }
-  return NextResponse.json({ screenings: data.screenings(sess.orgId) });
+  return NextResponse.json({ screenings: await data.screenings(sess.orgId) });
 }

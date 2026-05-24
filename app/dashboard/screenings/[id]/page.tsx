@@ -9,11 +9,11 @@ import { requireSession } from "@/lib/auth";
 import { formatDateTime } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 
-export default function ScreeningDetail({ params }: { params: { id: string } }) {
+export default async function ScreeningDetail({ params }: { params: { id: string } }) {
   const sess = requireSession();
-  const s = data.screenings(sess.orgId).find((x) => x.id === params.id);
+  const s = (await data.screenings(sess.orgId)).find((x) => x.id === params.id);
   if (!s) notFound();
-  const site = data.sites(sess.orgId).find((x) => x.id === s.siteId);
+  const site = (await data.sites(sess.orgId)).find((x) => x.id === s.siteId);
 
   return (
     <div className="space-y-4 print-page">

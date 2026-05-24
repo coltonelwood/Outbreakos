@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { addLead, logAudit } from "@/lib/store";
+import { addLead } from "@/lib/store";
 import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 
 const schema = z.object({
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   if (parsed.data.website && parsed.data.website.length > 0) {
     return NextResponse.json({ ok: true });
   }
-  const lead = addLead({
+  const lead = await addLead({
     email: parsed.data.email,
     name: parsed.data.name,
     org: parsed.data.org,
@@ -68,11 +68,7 @@ export async function POST(req: Request) {
   });
   // Fire-and-forget so the user gets a fast response even if Slack is slow.
   notifySlack(parsed.data).catch(() => {});
-  // Audited globally; owner-side review surface is /dashboard/leads.
-  logAudit("global", "public", "lead.create", lead.id, {
-    audience: parsed.data.audience,
-    intent: parsed.data.intent,
-    utm: parsed.data.utm,
-  });
+  // The lead row itself is the durable record (leads are global, not
+  // org-scoped, so they are not written to the org-scoped audit log).
   return NextResponse.json({ ok: true, leadId: lead.id });
 }

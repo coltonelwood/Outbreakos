@@ -10,11 +10,11 @@ import { formatDateTime } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { RegenerateButton } from "./regenerate-button";
 
-export default function ReportDetail({ params }: { params: { id: string } }) {
+export default async function ReportDetail({ params }: { params: { id: string } }) {
   const sess = requireSession();
-  const r = data.reports(sess.orgId).find((x) => x.id === params.id);
+  const r = (await data.reports(sess.orgId)).find((x) => x.id === params.id);
   if (!r) notFound();
-  const org = data.org(sess.orgId)!;
+  const org = (await data.org(sess.orgId))!;
 
   return (
     <div className="space-y-4 print-page">

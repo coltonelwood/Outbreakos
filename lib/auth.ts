@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
-import { db, currentSessionVersion, isDeactivated } from "./store";
+import { currentSessionVersion, isDeactivated, userById } from "./store";
 import type { Profile, Role } from "./types";
 import { can, PermissionError, type Capability } from "./permissions";
 
@@ -58,21 +58,21 @@ export function getSession(): Session | null {
     if (!decoded.userId || !decoded.orgId || !decoded.role) return null;
     // Sessions older than 7d are rejected even if the cookie is still around.
     if (Date.now() - (decoded.iat ?? 0) > 7 * 86400 * 1000) return null;
-    // Revocation check: a logout-all, password change, role change, or
-    // deactivation bumps the user's session version, invalidating this cookie.
-    if (isDeactivated(decoded.userId)) return null;
-    if ((decoded.sv ?? 0) !== currentSessionVersion(decoded.userId)) return null;
+    // Signature + expiry are validated synchronously here (no DB).
+    // Live revocation (logout-all / role change / deactivation) is enforced by
+    // the async assertSessionActive() in the dashboard layout and mutating
+    // API routes, which compares this cookie's `sv` against the DB.
     return decoded as Session;
   } catch {
     return null;
   }
 }
 
-export function setSession(s: Omit<Session, "iat" | "sv">) {
+export async function setSession(s: Omit<Session, "iat" | "sv">) {
   const session: Session = {
     ...s,
     iat: Date.now(),
-    sv: currentSessionVersion(s.userId),
+    sv: await currentSessionVersion(s.userId),
   };
   const payload = Buffer.from(JSON.stringify(session)).toString("base64url");
   const value = `${payload}.${sign(payload)}`;
@@ -101,10 +101,23 @@ export function requireCapability(cap: Capability): Session {
   return s;
 }
 
-export function currentUser(): Profile | null {
+export async function currentUser(): Promise<Profile | null> {
   const s = getSession();
   if (!s) return null;
-  return db().users.find((u) => u.id === s.userId) ?? null;
+  return userById(s.userId);
+}
+
+// Live revocation check (async, hits the DB). Returns false if the user was
+// deactivated or their sessions were revoked since this cookie was issued.
+export async function isSessionActive(s: Session): Promise<boolean> {
+  if (await isDeactivated(s.userId)) return false;
+  return (s.sv ?? 0) === (await currentSessionVersion(s.userId));
+}
+
+// Throws UnauthorizedError if the (already signature-valid) session has been
+// revoked/deactivated. Use in the dashboard layout + mutating API routes.
+export async function assertSessionActive(s: Session): Promise<void> {
+  if (!(await isSessionActive(s))) throw new UnauthorizedError();
 }
 
 export class UnauthorizedError extends Error {

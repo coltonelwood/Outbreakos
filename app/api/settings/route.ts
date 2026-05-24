@@ -46,6 +46,6 @@ export async function PATCH(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const settings = updateSettings(sess.orgId, parsed.data, sess.userId);
+  const settings = await updateSettings(sess.orgId, parsed.data, sess.userId);
   return NextResponse.json({ settings });
 }

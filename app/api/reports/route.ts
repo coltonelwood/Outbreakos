@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const draft = buildSitRep(sess.orgId, parsed.data.kind, sess.userId);
-  const saved = addReport(draft);
+  const draft = await buildSitRep(sess.orgId, parsed.data.kind, sess.userId);
+  const saved = await addReport(draft);
   return NextResponse.json({ report: saved });
 }

@@ -26,10 +26,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   let c = null;
   if (parsed.data.status) {
-    c = updateContactStatus(sess.orgId, params.id, parsed.data.status, sess.userId);
+    c = await updateContactStatus(sess.orgId, params.id, parsed.data.status, sess.userId);
   }
   if (parsed.data.checkin) {
-    c = logCheckin(sess.orgId, params.id, parsed.data.checkin.day, parsed.data.checkin.status, sess.userId);
+    c = await logCheckin(sess.orgId, params.id, parsed.data.checkin.day, parsed.data.checkin.status, sess.userId);
   }
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ contact: c });

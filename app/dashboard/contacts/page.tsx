@@ -3,9 +3,9 @@ import { requireSession } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { ContactsClient } from "./contacts-client";
 
-export default function ContactsPage() {
+export default async function ContactsPage() {
   const sess = requireSession();
-  const contacts = data.contacts(sess.orgId);
+  const contacts = await data.contacts(sess.orgId);
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between flex-wrap gap-3">

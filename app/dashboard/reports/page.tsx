@@ -7,9 +7,9 @@ import { formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
   const sess = requireSession();
-  const reports = data.reports(sess.orgId);
+  const reports = await data.reports(sess.orgId);
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between flex-wrap gap-3">

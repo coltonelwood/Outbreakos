@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const reasonText = parsed.data.reference
     ? `${parsed.data.reason} (${parsed.data.reference})`
     : parsed.data.reason;
-  const r = adjustResource(sess.orgId, params.id, parsed.data.delta, sess.userId, reasonText);
+  const r = await adjustResource(sess.orgId, params.id, parsed.data.delta, sess.userId, reasonText);
   if (!r) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ resource: r });
 }

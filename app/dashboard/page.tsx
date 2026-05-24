@@ -27,23 +27,20 @@ import { screeningTimeseries, riskBreakdown } from "@/lib/analytics";
 export default async function DashboardPage() {
   const sess = requireSession();
   const orgId = sess.orgId;
-  const org = data.org(orgId)!;
-  const regions = data.regions(orgId);
-  const sites = data.sites(orgId);
-  const screenings = data.screenings(orgId);
-  const contacts = data.contacts(orgId);
-  const resources = data.resources(orgId);
-  const alerts = data.alerts(orgId);
-  const audit = data.audit(orgId);
-  const reports = data.reports(orgId);
-
-  const settings = data.settings(orgId);
+  const [orgRaw, regions, sites, screenings, contacts, resources, alerts, audit, reports, settings] =
+    await Promise.all([
+      data.org(orgId), data.regions(orgId), data.sites(orgId), data.screenings(orgId),
+      data.contacts(orgId), data.resources(orgId), data.alerts(orgId), data.audit(orgId),
+      data.reports(orgId), data.settings(orgId),
+    ]);
+  const org = orgRaw!;
 
   // Onboarding completion is detected from real state (not hardcoded) and
   // persisted: once dismissed or all steps done, the dashboard renders normally.
+  const userCount = (await data.users(orgId)).length;
   const steps = [
     { key: "site", done: sites.length > 0, label: "Add your first site", href: "/dashboard/sites", cta: "Add site" },
-    { key: "user", done: data.users(orgId).length > 1, label: "Invite your team", href: "/dashboard/settings", cta: "Invite" },
+    { key: "user", done: userCount > 1, label: "Invite your team", href: "/dashboard/settings", cta: "Invite" },
     {
       key: "risk",
       // "done" when the org has saved risk weights different from the default,

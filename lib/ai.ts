@@ -50,12 +50,10 @@ export interface AIResponse {
   generatedAt: string;
 }
 
-function snapshot(orgId: string) {
-  const regions = data.regions(orgId);
-  const sites = data.sites(orgId);
-  const alerts = data.alerts(orgId);
-  const screenings = data.screenings(orgId);
-  const resources = data.resources(orgId);
+async function snapshot(orgId: string) {
+  const [regions, sites, alerts, screenings, resources] = await Promise.all([
+    data.regions(orgId), data.sites(orgId), data.alerts(orgId), data.screenings(orgId), data.resources(orgId),
+  ]);
   const totals = regions.reduce(
     (acc, r) => ({
       confirmed: acc.confirmed + r.confirmed,
@@ -68,8 +66,8 @@ function snapshot(orgId: string) {
   return { regions, sites, alerts, screenings, resources, totals };
 }
 
-function buildContext(orgId: string): string {
-  const s = snapshot(orgId);
+async function buildContext(orgId: string): Promise<string> {
+  const s = await snapshot(orgId);
   return `Organization snapshot (${new Date().toISOString().slice(0, 10)}):
 - Regions tracked: ${s.regions.map((r) => `${r.name}[${r.id}](${r.severity},${r.trend})`).join(", ") || "(none yet)"}
 - Totals: confirmed=${s.totals.confirmed} suspected=${s.totals.suspected} deaths=${s.totals.deaths} contacts_monitored=${s.totals.contacts}
@@ -120,8 +118,8 @@ async function callAnthropic(prompt: string): Promise<string> {
   return block?.text ?? "(AI returned no content.)";
 }
 
-function deterministicResponse(req: AIRequest): { text: string; citations: string[] } {
-  const s = snapshot(req.orgId);
+async function deterministicResponse(req: AIRequest): Promise<{ text: string; citations: string[] }> {
+  const s = await snapshot(req.orgId);
   const cites: string[] = [];
   const refRegions = s.regions.slice(0, 5).map((r) => {
     cites.push(`region:${r.id}`);
@@ -243,7 +241,7 @@ This is an operational triage tier driving workflow, NOT a clinical diagnosis. A
     default: {
       const text = `Operational response to: "${req.user}"
 
-${buildContext(req.orgId)}
+${await buildContext(req.orgId)}
 
 Suggested next operational steps (human review required):
 1. Review open alerts in the Alerts Center.
@@ -257,25 +255,23 @@ Suggested next operational steps (human review required):
 
 export async function aiCommand(req: AIRequest): Promise<AIResponse> {
   const p = provider();
-  const fullPrompt = `${buildContext(req.orgId)}\n\nUser request (intent=${req.intent || "freeform"}):\n${req.user}`;
+  const fullPrompt = `${await buildContext(req.orgId)}\n\nUser request (intent=${req.intent || "freeform"}):\n${req.user}`;
   let text: string;
   let citations: string[];
   try {
     if (p === "openai") {
       text = await callOpenAI(fullPrompt);
-      const det = deterministicResponse(req);
-      citations = det.citations;
+      citations = (await deterministicResponse(req)).citations;
     } else if (p === "anthropic") {
       text = await callAnthropic(fullPrompt);
-      const det = deterministicResponse(req);
-      citations = det.citations;
+      citations = (await deterministicResponse(req)).citations;
     } else {
-      const det = deterministicResponse(req);
+      const det = await deterministicResponse(req);
       text = det.text;
       citations = det.citations;
     }
   } catch {
-    const det = deterministicResponse(req);
+    const det = await deterministicResponse(req);
     text = det.text + "\n\n(Note: live AI provider call failed, using deterministic fallback.)";
     citations = det.citations;
   }
@@ -302,12 +298,13 @@ export async function aiBriefingCached(orgId: string, ttlSec = 300): Promise<AIR
   }).then((r) => ({ ...r, cached: true }));
 }
 
-export function buildSitRep(
+export async function buildSitRep(
   orgId: string,
   kind: SitRep["kind"],
   actor: string,
-): Omit<SitRep, "id"> {
-  const s = snapshot(orgId);
+): Promise<Omit<SitRep, "id">> {
+  const s = await snapshot(orgId);
+  const contactsList = await data.contacts(orgId);
   const screened = s.screenings.length;
   const urgent = s.screenings.filter((x) => x.risk === "urgent").length;
   const elevated = s.screenings.filter((x) => x.risk === "elevated").length;
@@ -358,7 +355,7 @@ export function buildSitRep(
       keyNumbers = [
         { label: "Mining sites", value: String(s.sites.filter((x) => x.kind === "mine").length) },
         { label: "Worker screenings", value: String(screened) },
-        { label: "Active contacts", value: String(data.contacts(orgId).filter((c) => c.status === "active").length) },
+        { label: "Active contacts", value: String(contactsList.filter((c) => c.status === "active").length) },
       ];
       recommended = [
         "Verify rotation manifests align with site entry screenings",
@@ -404,7 +401,7 @@ export function buildSitRep(
     .map((a) => a.title);
   const changesSinceLast = [
     `${screened} new screenings recorded`,
-    `${data.contacts(orgId).filter((c) => c.status === "cleared").length} contact(s) cleared`,
+    `${contactsList.filter((c) => c.status === "cleared").length} contact(s) cleared`,
     `${s.alerts.filter((a) => a.status === "resolved").length} alert(s) resolved`,
   ];
 

@@ -3,11 +3,11 @@ import { currentUser, requireSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { SitesClient } from "./sites-client";
 
-export default function SitesPage() {
+export default async function SitesPage() {
   const sess = requireSession();
-  const user = currentUser()!;
-  const sites = data.sites(sess.orgId);
-  const resources = data.resources(sess.orgId);
+  const [user, sites, resources] = await Promise.all([
+    currentUser(), data.sites(sess.orgId), data.resources(sess.orgId),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -21,7 +21,7 @@ export default function SitesPage() {
       <SitesClient
         sites={sites}
         resources={resources}
-        canCreate={can(user.role, "site.create")}
+        canCreate={can(user!.role, "site.create")}
       />
     </div>
   );

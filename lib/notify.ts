@@ -10,7 +10,7 @@
 // actually told. Delivery records persist in the store (Postgres:
 // `notifications` table).
 
-import { db, logAudit } from "./store";
+import { addNotification, logAudit } from "./store";
 import { uid } from "./utils";
 import type { Severity } from "./types";
 
@@ -128,7 +128,17 @@ export async function dispatch(input: DispatchInput): Promise<NotificationRecord
     rec.error = msg;
   }
   records().unshift(rec);
-  logAudit(input.orgId, "system", `notify.${rec.status}`, rec.id, {
+  // Persist the delivery record (Supabase notifications table) + audit it.
+  await addNotification(input.orgId, {
+    channel: rec.channel,
+    target: rec.target,
+    subject: rec.subject,
+    body: rec.body,
+    severity: rec.severity,
+    status: rec.status,
+    error: rec.error,
+  });
+  await logAudit(input.orgId, "system", `notify.${rec.status}`, rec.id, {
     channel: rec.channel,
     severity: rec.severity,
   });

@@ -1,4 +1,4 @@
-import { data, db } from "@/lib/store";
+import { data, isDeactivated } from "@/lib/store";
 import { currentUser, requireSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +10,16 @@ import { RiskWeightsForm } from "./risk-weights-form";
 import { UsersClient } from "./users-client";
 import { LogoutAllButton } from "./logout-all-button";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
   const sess = requireSession();
-  const user = currentUser()!;
-  const org = data.org(sess.orgId)!;
-  const settings = data.settings(sess.orgId);
-  const users = data.users(sess.orgId).map((u) => ({ ...u, deactivated: db().deactivated.has(u.id) }));
+  const [userRaw, orgRaw, settings, userList] = await Promise.all([
+    currentUser(), data.org(sess.orgId), data.settings(sess.orgId), data.users(sess.orgId),
+  ]);
+  const user = userRaw!;
+  const org = orgRaw!;
+  const users = await Promise.all(
+    userList.map(async (u) => ({ ...u, deactivated: await isDeactivated(u.id) })),
+  );
   const canUpdate = can(user.role, "settings.update");
   const canExport = can(user.role, "org.export");
   const canManageUsers = can(user.role, "user.invite");

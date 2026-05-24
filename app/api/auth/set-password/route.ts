@@ -19,10 +19,10 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const user = consumeSetPasswordToken(parsed.data.token, parsed.data.password);
+  const user = await consumeSetPasswordToken(parsed.data.token, parsed.data.password);
   if (!user) {
     return NextResponse.json({ error: "Invalid or expired token." }, { status: 400 });
   }
-  setSession({ userId: user.id, role: user.role, orgId: user.orgId });
+  await setSession({ userId: user.id, role: user.role, orgId: user.orgId });
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createOrg, createUser, db, logAudit } from "@/lib/store";
+import { createOrg, createUser, userByEmail, logAudit } from "@/lib/store";
 import { setSession } from "@/lib/auth";
 import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 import type { OpsMode } from "@/lib/types";
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   // Email uniqueness — single tenant per email in demo mode. Real auth
   // (Supabase) handles this with a unique constraint.
-  if (db().users.some((u) => u.email.toLowerCase() === v.email.toLowerCase())) {
+  if (await userByEmail(v.email)) {
     return NextResponse.json(
       { error: "An account with that email already exists." },
       { status: 409 },
@@ -36,14 +36,14 @@ export async function POST(req: Request) {
 
   // CRITICAL: new organization per signup. The signing-up user becomes the
   // owner of *their own* org. They never see another tenant's data.
-  const org = createOrg(v.org, v.mode as OpsMode);
-  const user = createUser(
+  const org = await createOrg(v.org, v.mode as OpsMode);
+  const user = await createUser(
     org.id,
     { email: v.email, name: v.name, role: "owner" },
     v.password,
   );
-  setSession({ userId: user.id, role: user.role, orgId: org.id });
-  logAudit(org.id, user.id, "org.create", org.id, { mode: v.mode });
-  logAudit(org.id, user.id, "auth.signup", user.id);
+  await setSession({ userId: user.id, role: user.role, orgId: org.id });
+  await logAudit(org.id, user.id, "org.create", org.id, { mode: v.mode });
+  await logAudit(org.id, user.id, "auth.signup", user.id);
   return NextResponse.json({ ok: true, orgId: org.id });
 }

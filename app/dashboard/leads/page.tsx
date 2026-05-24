@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { LeadsClient } from "./leads-client";
 import { Inbox } from "lucide-react";
 
-export default function LeadsPage() {
+export default async function LeadsPage() {
   // Owner-only — defense in depth (sidebar already hides for non-owners; this
   // enforces server-side). Non-owners see a 404 rather than a stack trace.
   try {
@@ -16,7 +16,7 @@ export default function LeadsPage() {
     if (e instanceof PermissionError) notFound();
     throw e;
   }
-  const leads = data.leads();
+  const leads = await data.leads();
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between flex-wrap gap-3">

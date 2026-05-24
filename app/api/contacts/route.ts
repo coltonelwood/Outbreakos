@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const c = addContact(sess.orgId, sess.userId, {
+  const c = await addContact(sess.orgId, sess.userId, {
     name: parsed.data.name,
     phone: parsed.data.phone,
     monitoringStart: new Date().toISOString(),
@@ -39,5 +39,5 @@ export async function GET() {
   } catch (e) {
     return authErrorResponse(e);
   }
-  return NextResponse.json({ contacts: data.contacts(sess.orgId) });
+  return NextResponse.json({ contacts: await data.contacts(sess.orgId) });
 }

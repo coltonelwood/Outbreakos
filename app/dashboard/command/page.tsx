@@ -26,13 +26,12 @@ const siteKindIcons: Record<string, typeof Plane> = {
   field_base: Building2,
 };
 
-export default function CommandPage() {
+export default async function CommandPage() {
   const sess = requireSession();
   const orgId = sess.orgId;
-  const regions = data.regions(orgId);
-  const sites = data.sites(orgId);
-  const alerts = data.alerts(orgId);
-  const screenings = data.screenings(orgId);
+  const [regions, sites, alerts, screenings] = await Promise.all([
+    data.regions(orgId), data.sites(orgId), data.alerts(orgId), data.screenings(orgId),
+  ]);
 
   const totals = regions.reduce(
     (acc, r) => ({
@@ -212,8 +211,8 @@ export default function CommandPage() {
 }
 
 function computeCorridors(
-  sites: ReturnType<typeof data.sites>,
-  regions: ReturnType<typeof data.regions>,
+  sites: Awaited<ReturnType<typeof data.sites>>,
+  regions: Awaited<ReturnType<typeof data.regions>>,
 ) {
   const out: { name: string; from: string; to: string; risk: Severity; detail: string }[] = [];
   // For every pair of (site near active region, site in another country) pair

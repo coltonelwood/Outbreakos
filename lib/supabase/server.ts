@@ -31,9 +31,17 @@ export function supabaseAdmin(): SupabaseClient {
   }
   _admin = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: noStoreFetch },
   });
   return _admin;
 }
+
+// Next.js patches the global fetch with caching/instrumentation in the server
+// runtime, which corrupts supabase-js response handling (reads come back empty
+// even though writes succeed). Forcing cache: "no-store" opts every Supabase
+// request out of Next's fetch cache so responses are read correctly.
+const noStoreFetch: typeof fetch = (input, init) =>
+  fetch(input, { ...init, cache: "no-store" });
 
 export function supabaseServer(): SupabaseClient {
   if (_server) return _server;
@@ -46,6 +54,7 @@ export function supabaseServer(): SupabaseClient {
   }
   _server = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: noStoreFetch },
   });
   return _server;
 }

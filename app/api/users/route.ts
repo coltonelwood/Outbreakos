@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { changeUserRole, data, db, inviteUser, setUserActive } from "@/lib/store";
+import { changeUserRole, data, isDeactivated, inviteUser, setUserActive } from "@/lib/store";
 import { authErrorResponse, requireCapability } from "@/lib/auth";
 
 const inviteSchema = z.object({
@@ -22,10 +22,10 @@ export async function GET() {
   } catch (e) {
     return authErrorResponse(e);
   }
-  const users = data.users(sess.orgId).map((u) => ({
-    ...u,
-    deactivated: db().deactivated.has(u.id),
-  }));
+  const list = await data.users(sess.orgId);
+  const users = await Promise.all(
+    list.map(async (u) => ({ ...u, deactivated: await isDeactivated(u.id) })),
+  );
   return NextResponse.json({ users });
 }
 
@@ -40,10 +40,11 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  if (data.users(sess.orgId).some((u) => u.email.toLowerCase() === parsed.data.email.toLowerCase())) {
+  const existing = await data.users(sess.orgId);
+  if (existing.some((u) => u.email.toLowerCase() === parsed.data.email.toLowerCase())) {
     return NextResponse.json({ error: "A user with that email already exists in your org." }, { status: 409 });
   }
-  const { user, token } = inviteUser(
+  const { user, token } = await inviteUser(
     sess.orgId,
     sess.userId,
     parsed.data.email,
@@ -80,8 +81,8 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "You cannot modify your own account here." }, { status: 400 });
   }
   let user = null;
-  if (role) user = changeUserRole(sess.orgId, userId, role, sess.userId);
-  if (active !== undefined) user = setUserActive(sess.orgId, userId, active, sess.userId);
+  if (role) user = await changeUserRole(sess.orgId, userId, role, sess.userId);
+  if (active !== undefined) user = await setUserActive(sess.orgId, userId, active, sess.userId);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

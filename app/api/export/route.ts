@@ -10,22 +10,17 @@ export async function GET() {
     return authErrorResponse(e);
   }
   const orgId = sess.orgId;
+  const [org, users, sites, regions, cases, screenings, contacts, alerts, resources, reports, audit, settings] =
+    await Promise.all([
+      data.org(orgId), data.users(orgId), data.sites(orgId), data.regions(orgId),
+      data.cases(orgId), data.screenings(orgId), data.contacts(orgId), data.alerts(orgId),
+      data.resources(orgId), data.reports(orgId), data.audit(orgId), data.settings(orgId),
+    ]);
   const payload = {
     exportedAt: new Date().toISOString(),
-    org: data.org(orgId),
-    users: data.users(orgId),
-    sites: data.sites(orgId),
-    regions: data.regions(orgId),
-    cases: data.cases(orgId),
-    screenings: data.screenings(orgId),
-    contacts: data.contacts(orgId),
-    alerts: data.alerts(orgId),
-    resources: data.resources(orgId),
-    reports: data.reports(orgId),
-    audit: data.audit(orgId),
-    settings: data.settings(orgId),
+    org, users, sites, regions, cases, screenings, contacts, alerts, resources, reports, audit, settings,
   };
-  logAudit(orgId, sess.userId, "org.export", orgId);
+  await logAudit(orgId, sess.userId, "org.export", orgId);
   return new NextResponse(JSON.stringify(payload, null, 2), {
     headers: {
       "Content-Type": "application/json",

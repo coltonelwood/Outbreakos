@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuditClient } from "./audit-client";
 import { ScrollText } from "lucide-react";
 
-export default function AuditPage() {
+export default async function AuditPage() {
   const sess = requireSession();
-  const audit = data.audit(sess.orgId);
+  const audit = await data.audit(sess.orgId);
   return (
     <div className="space-y-4">
       <div>

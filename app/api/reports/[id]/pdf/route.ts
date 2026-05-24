@@ -82,9 +82,9 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   } catch (e) {
     return authErrorResponse(e);
   }
-  const report = data.reports(sess.orgId).find((r) => r.id === params.id);
+  const report = (await data.reports(sess.orgId)).find((r) => r.id === params.id);
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const org = data.org(sess.orgId)!;
+  const org = (await data.org(sess.orgId))!;
 
   const tree = h(
     Document,

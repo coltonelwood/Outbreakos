@@ -4,10 +4,9 @@ import { NotADiagnosticBanner } from "@/components/ui/disclaimer";
 import { data } from "@/lib/store";
 import { currentUser, requireSession } from "@/lib/auth";
 
-export default function NewScreeningPage() {
+export default async function NewScreeningPage() {
   const sess = requireSession();
-  const sites = data.sites(sess.orgId);
-  const user = currentUser();
+  const [sites, user] = await Promise.all([data.sites(sess.orgId), currentUser()]);
   return (
     <div className="space-y-4">
       <div>

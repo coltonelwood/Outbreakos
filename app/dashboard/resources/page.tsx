@@ -4,10 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ResourcesClient } from "./resources-client";
 import { Boxes, AlertTriangle, TrendingDown } from "lucide-react";
 
-export default function ResourcesPage() {
+export default async function ResourcesPage() {
   const sess = requireSession();
-  const resources = data.resources(sess.orgId);
-  const sites = data.sites(sess.orgId);
+  const [resources, sites] = await Promise.all([data.resources(sess.orgId), data.sites(sess.orgId)]);
   const totalItems = resources.length;
   const lowStock = resources.filter((r) => r.onHand < r.minStock).length;
   const criticalDays = resources

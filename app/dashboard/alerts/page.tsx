@@ -3,10 +3,9 @@ import { requireSession } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertsClient } from "./alerts-client";
 
-export default function AlertsPage() {
+export default async function AlertsPage() {
   const sess = requireSession();
-  const alerts = data.alerts(sess.orgId);
-  const users = data.users(sess.orgId);
+  const [alerts, users] = await Promise.all([data.alerts(sess.orgId), data.users(sess.orgId)]);
   return (
     <div className="space-y-4">
       <div>

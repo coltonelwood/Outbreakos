@@ -3,12 +3,11 @@ import { requireSession } from "@/lib/auth";
 import { MapClient } from "./map-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function MapPage() {
+export default async function MapPage() {
   const sess = requireSession();
-  const regions = data.regions(sess.orgId);
-  const sites = data.sites(sess.orgId);
-  const cases = data.cases(sess.orgId);
-  const contacts = data.contacts(sess.orgId);
+  const [regions, sites, cases, contacts] = await Promise.all([
+    data.regions(sess.orgId), data.sites(sess.orgId), data.cases(sess.orgId), data.contacts(sess.orgId),
+  ]);
   return (
     <div className="space-y-4">
       <div>

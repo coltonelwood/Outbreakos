@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const a = addAlert(sess.orgId, sess.userId, parsed.data);
+  const a = await addAlert(sess.orgId, sess.userId, parsed.data);
   return NextResponse.json({ alert: a });
 }
 
@@ -40,5 +40,5 @@ export async function GET() {
   } catch (e) {
     return authErrorResponse(e);
   }
-  return NextResponse.json({ alerts: data.alerts(sess.orgId) });
+  return NextResponse.json({ alerts: await data.alerts(sess.orgId) });
 }

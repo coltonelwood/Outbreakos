@@ -16,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const a = setAlertStatus(sess.orgId, params.id, parsed.data.status, sess.userId);
+  const a = await setAlertStatus(sess.orgId, params.id, parsed.data.status, sess.userId);
   if (!a) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ alert: a });
 }

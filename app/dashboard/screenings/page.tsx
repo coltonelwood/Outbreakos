@@ -7,9 +7,9 @@ import { requireSession } from "@/lib/auth";
 import { formatDateTime } from "@/lib/utils";
 import { ClipboardCheck } from "lucide-react";
 
-export default function ScreeningsPage() {
+export default async function ScreeningsPage() {
   const sess = requireSession();
-  const screenings = data.screenings(sess.orgId);
+  const screenings = await data.screenings(sess.orgId);
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between">
