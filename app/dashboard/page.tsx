@@ -22,7 +22,7 @@ import { data } from "@/lib/store";
 import { aiBriefingCached } from "@/lib/ai";
 import { requireSession } from "@/lib/auth";
 import { compactNumber, formatDateTime, relativeTime } from "@/lib/utils";
-import { DEMO_TIMESERIES, DEMO_RISK_BREAKDOWN } from "@/lib/demo-data";
+import { screeningTimeseries, riskBreakdown } from "@/lib/analytics";
 
 export default async function DashboardPage() {
   const sess = requireSession();
@@ -37,12 +37,34 @@ export default async function DashboardPage() {
   const audit = data.audit(orgId);
   const reports = data.reports(orgId);
 
-  const isDemoOrg = orgId === "org_demo";
+  const settings = data.settings(orgId);
 
-  // New tenant with no data? Show onboarding checklist and skip the heavy
-  // dashboard so they aren't staring at zeros.
-  const isEmpty = sites.length === 0 && screenings.length === 0;
-  if (isEmpty) {
+  // Onboarding completion is detected from real state (not hardcoded) and
+  // persisted: once dismissed or all steps done, the dashboard renders normally.
+  const steps = [
+    { key: "site", done: sites.length > 0, label: "Add your first site", href: "/dashboard/sites", cta: "Add site" },
+    { key: "user", done: data.users(orgId).length > 1, label: "Invite your team", href: "/dashboard/settings", cta: "Invite" },
+    {
+      key: "risk",
+      // "done" when the org has saved risk weights different from the default,
+      // OR explicitly recorded completion.
+      done:
+        settings.onboarding.completedSteps.includes("risk") ||
+        JSON.stringify(settings.riskWeights) !==
+          JSON.stringify({ fever: 25, bleeding: 40, contact: 30, travel: 20, hcw: 15, funeral: 20 }),
+      label: "Review operational risk weights",
+      href: "/dashboard/settings",
+      cta: "Review",
+    },
+    { key: "screening", done: screenings.length > 0, label: "Run a test screening", href: "/dashboard/screenings/new", cta: "Run" },
+    { key: "report", done: reports.length > 0, label: "Generate your first SITREP", href: "/dashboard/reports", cta: "Generate" },
+  ];
+  const allDone = steps.every((s) => s.done);
+
+  // New tenant: show onboarding instead of zeros — UNLESS they've completed or
+  // dismissed it. The dashboard never shows fabricated activity.
+  const showOnboarding = !settings.onboarding.dismissed && !allDone && screenings.length === 0;
+  if (showOnboarding) {
     return (
       <div className="space-y-6">
         <div>
@@ -50,43 +72,10 @@ export default async function DashboardPage() {
             Welcome to {org.name}
           </h1>
           <p className="text-muted-foreground text-sm">
-            Five quick steps and you're ready to run operations from this command center.
+            A few quick steps and you're ready to run operations from this command center.
           </p>
         </div>
-        <OnboardingChecklist
-          steps={[
-            {
-              done: sites.length > 0,
-              label: "Add your first site",
-              href: "/dashboard/sites",
-              cta: "Add site",
-            },
-            {
-              done: data.users(orgId).length > 1,
-              label: "Invite your team",
-              href: "/dashboard/settings",
-              cta: "Open settings",
-            },
-            {
-              done: false,
-              label: "Configure operational risk weights",
-              href: "/dashboard/settings",
-              cta: "Configure",
-            },
-            {
-              done: screenings.length > 0,
-              label: "Run a test screening",
-              href: "/dashboard/screenings/new",
-              cta: "Run",
-            },
-            {
-              done: reports.length > 0,
-              label: "Generate your first SITREP",
-              href: "/dashboard/reports",
-              cta: "Generate",
-            },
-          ]}
-        />
+        <OnboardingChecklist steps={steps} />
         <NotADiagnosticBanner />
       </div>
     );
@@ -106,6 +95,10 @@ export default async function DashboardPage() {
   const urgentScreenings = screenings.filter((s) => s.risk === "urgent").length;
   const lowStockCount = resources.filter((r) => r.onHand < r.minStock).length;
   const activeContacts = contacts.filter((c) => c.status === "active").length;
+
+  // Real, org-scoped chart data — computed from this org's own screenings.
+  const chartData = screeningTimeseries(screenings);
+  const breakdown = riskBreakdown(screenings);
 
   // Cached AI summary — does NOT run on every dashboard load.
   const aiSummary = await aiBriefingCached(orgId);
@@ -145,7 +138,7 @@ export default async function DashboardPage() {
         <StatCard label="Suspected" value={totals.suspected} intent={totals.suspected > 0 ? "warning" : "default"} />
         <StatCard label="Deaths" value={totals.deaths} intent={totals.deaths > 0 ? "critical" : "default"} />
         <StatCard label="Contacts monitored" value={totals.contacts} />
-        <StatCard label="Screenings (window)" value={compactNumber(screenings.length + (isDemoOrg ? 1838 : 0))} />
+        <StatCard label="Screenings (recorded)" value={compactNumber(screenings.length)} />
         <StatCard label="Urgent operational flags" value={urgentScreenings} intent={urgentScreenings ? "critical" : "default"} />
       </div>
 
@@ -167,7 +160,21 @@ export default async function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <ScreeningChart data={DEMO_TIMESERIES} riskBreakdown={DEMO_RISK_BREAKDOWN} />
+            {chartData.some((d) => d.screenings > 0) ? (
+              <ScreeningChart data={chartData} riskBreakdown={breakdown} />
+            ) : (
+              <div className="h-64 flex flex-col items-center justify-center text-center gap-3">
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  No screenings recorded yet. This chart fills in from your own
+                  screening activity — nothing here is simulated.
+                </p>
+                <Link href="/dashboard/screenings/new">
+                  <Button size="sm">
+                    <ClipboardCheck className="h-4 w-4" /> Run your first screening
+                  </Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
 

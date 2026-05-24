@@ -4,8 +4,13 @@ import { Topbar } from "@/components/app/topbar";
 import { DemoBanner } from "@/components/ui/disclaimer";
 import { currentUser, getSession } from "@/lib/auth";
 import { data } from "@/lib/store";
+import { assertPersistence } from "@/lib/persistence-guard";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Refuse to serve on the in-memory store when REQUIRE_PERSISTENCE=true.
+  // The dashboard error boundary renders the PersistenceError cleanly.
+  assertPersistence();
+
   const session = getSession();
   const user = currentUser();
   if (!session || !user) redirect("/login");

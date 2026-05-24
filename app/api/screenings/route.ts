@@ -4,6 +4,7 @@ import { addScreening, data } from "@/lib/store";
 import { scoreScreening } from "@/lib/risk";
 import { authErrorResponse, requireCapability } from "@/lib/auth";
 import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
+import { notifyEvent } from "@/lib/notify";
 
 const schema = z.object({
   context: z.enum(["airport", "site_entry", "clinic"]),
@@ -94,6 +95,24 @@ export async function POST(req: Request) {
     rationale: scored.rationale,
     createdBy: sess.userId,
   });
+
+  // Real escalation: urgent/elevated tiers notify the on-call health officer
+  // (and, for urgent, org admins/owners). Fire-and-forget so the screener's
+  // request returns immediately; delivery is recorded + audited.
+  if (scored.tier === "urgent" || scored.tier === "elevated") {
+    const officers = data
+      .users(sess.orgId)
+      .filter((u) => u.role === "health_officer" || (scored.tier === "urgent" && (u.role === "admin" || u.role === "owner")));
+    const subject = `${scored.tier.toUpperCase()} operational tier — ${subjectName}`;
+    const body = `${v.context.replace("_", " ")} screening. Action: ${scored.action} (operational triage, not a diagnosis; human review required).`;
+    void notifyEvent({
+      orgId: sess.orgId,
+      severity: scored.tier === "urgent" ? "critical" : "high",
+      subject,
+      body,
+      email: officers[0]?.email,
+    });
+  }
 
   return NextResponse.json({ screening, score: scored.score });
 }

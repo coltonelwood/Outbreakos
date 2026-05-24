@@ -18,7 +18,7 @@ import {
   DEMO_SETTINGS,
   DEMO_SITES,
   DEMO_USERS,
-} from "./demo-data";
+} from "./demo-data.ts";
 import bcrypt from "bcryptjs";
 import type {
   Alert,
@@ -34,7 +34,7 @@ import type {
   Site,
   SitRep,
 } from "./types";
-import { uid } from "./utils";
+import { uid } from "./utils.ts";
 
 export interface Lead {
   id: string;
@@ -67,6 +67,15 @@ interface Db {
   // Passwords are hashed in production (Supabase auth or bcrypt).
   // In demo mode we map userId -> plain password for the seeded accounts only.
   passwords: Map<string, string>;
+  // Session revocation: each issued session carries the user's current
+  // sessionVersion. Bumping the version (logout-all, password change, user
+  // deactivation) invalidates every previously-issued cookie for that user.
+  // Maps to a `session_version` column on profiles in Postgres.
+  sessionVersions: Map<string, number>;
+  // Deactivated users cannot authenticate even with a valid session.
+  deactivated: Set<string>;
+  // Invite set-password tokens -> userId. (Postgres: a one-time-token table.)
+  setPasswordTokens: Map<string, string>;
 }
 
 const g = globalThis as unknown as { __outbreakos_db?: Db };
@@ -97,6 +106,9 @@ function freshDb(): Db {
     settings: [structuredClone(DEMO_SETTINGS)],
     leads: [],
     passwords,
+    sessionVersions: new Map(DEMO_USERS.map((u) => [u.id, 1])),
+    deactivated: new Set<string>(),
+    setPasswordTokens: new Map<string, string>(),
   };
 }
 
@@ -205,14 +217,106 @@ export function createUser(
   // bcrypt cost factor 10 ≈ ~80ms on a modern CPU; tolerable at signup time.
   const hash = bcrypt.hashSync(password, 10);
   db().passwords.set(user.id, hash);
+  db().sessionVersions.set(user.id, 1);
   return user;
 }
 
 export function verifyPassword(userId: string, password: string): boolean {
+  if (db().deactivated.has(userId)) return false;
   const hash = db().passwords.get(userId);
   if (!hash) return false;
   // bcrypt.compareSync is constant-time and resistant to timing attacks.
   return bcrypt.compareSync(password, hash);
+}
+
+// ---- Session revocation -------------------------------------------------
+
+export function currentSessionVersion(userId: string): number {
+  return db().sessionVersions.get(userId) ?? 1;
+}
+
+// Bumping the version invalidates every cookie previously issued to the user.
+export function revokeUserSessions(userId: string, actor: string, orgId: string) {
+  const v = currentSessionVersion(userId) + 1;
+  db().sessionVersions.set(userId, v);
+  logAudit(orgId, actor, "session.revoke_all", userId, { newVersion: v });
+  return v;
+}
+
+export function isDeactivated(userId: string): boolean {
+  return db().deactivated.has(userId);
+}
+
+export function setPassword(userId: string, password: string, actor: string, orgId: string) {
+  db().passwords.set(userId, bcrypt.hashSync(password, 10));
+  // Changing the password forces re-login everywhere.
+  revokeUserSessions(userId, actor, orgId);
+  logAudit(orgId, actor, "user.password_set", userId);
+}
+
+// ---- User lifecycle -----------------------------------------------------
+
+export function inviteUser(
+  orgId: string,
+  actor: string,
+  email: string,
+  name: string,
+  role: Profile["role"],
+) {
+  // Invited users get a random temporary password and a set-password token.
+  // (Email delivery is a separate concern; the token is surfaced to the
+  //  inviting admin until an email provider is wired — see /api/users.)
+  const tempPassword = uid("tmp") + uid("");
+  const user = createUser(orgId, { email, name, role }, tempPassword);
+  const token = Buffer.from(`${user.id}:${uid("set")}`).toString("base64url");
+  db().setPasswordTokens.set(token, user.id);
+  logAudit(orgId, actor, "user.invite", user.id, { email, role });
+  return { user, token };
+}
+
+export function consumeSetPasswordToken(token: string, password: string) {
+  const map = db().setPasswordTokens;
+  const userId = map.get(token);
+  if (!userId) return null;
+  const user = db().users.find((u) => u.id === userId);
+  if (!user) return null;
+  db().passwords.set(userId, bcrypt.hashSync(password, 10));
+  db().deactivated.delete(userId);
+  map.delete(token);
+  logAudit(user.orgId, userId, "user.password_set", userId, { via: "invite" });
+  return user;
+}
+
+export function changeUserRole(
+  orgId: string,
+  userId: string,
+  role: Profile["role"],
+  actor: string,
+) {
+  const u = db().users.find((x) => x.id === userId && x.orgId === orgId);
+  if (!u) return null;
+  u.role = role;
+  // Role change should re-issue the session so the new role takes effect.
+  revokeUserSessions(userId, actor, orgId);
+  logAudit(orgId, actor, "user.role_change", userId, { role });
+  return u;
+}
+
+export function setUserActive(
+  orgId: string,
+  userId: string,
+  active: boolean,
+  actor: string,
+) {
+  const u = db().users.find((x) => x.id === userId && x.orgId === orgId);
+  if (!u) return null;
+  if (active) db().deactivated.delete(userId);
+  else {
+    db().deactivated.add(userId);
+    revokeUserSessions(userId, actor, orgId);
+  }
+  logAudit(orgId, actor, active ? "user.reactivate" : "user.deactivate", userId);
+  return u;
 }
 
 export function addScreening(

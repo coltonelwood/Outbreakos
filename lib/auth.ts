@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
-import { db } from "./store";
+import { db, currentSessionVersion, isDeactivated } from "./store";
 import type { Profile, Role } from "./types";
 import { can, PermissionError, type Capability } from "./permissions";
 
@@ -44,6 +44,7 @@ export interface Session {
   role: Role;
   orgId: string;
   iat: number;
+  sv: number; // session version — must match the user's current version
 }
 
 export function getSession(): Session | null {
@@ -57,14 +58,22 @@ export function getSession(): Session | null {
     if (!decoded.userId || !decoded.orgId || !decoded.role) return null;
     // Sessions older than 7d are rejected even if the cookie is still around.
     if (Date.now() - (decoded.iat ?? 0) > 7 * 86400 * 1000) return null;
+    // Revocation check: a logout-all, password change, role change, or
+    // deactivation bumps the user's session version, invalidating this cookie.
+    if (isDeactivated(decoded.userId)) return null;
+    if ((decoded.sv ?? 0) !== currentSessionVersion(decoded.userId)) return null;
     return decoded as Session;
   } catch {
     return null;
   }
 }
 
-export function setSession(s: Omit<Session, "iat">) {
-  const session: Session = { ...s, iat: Date.now() };
+export function setSession(s: Omit<Session, "iat" | "sv">) {
+  const session: Session = {
+    ...s,
+    iat: Date.now(),
+    sv: currentSessionVersion(s.userId),
+  };
   const payload = Buffer.from(JSON.stringify(session)).toString("base64url");
   const value = `${payload}.${sign(payload)}`;
   cookies().set(COOKIE_NAME, value, {

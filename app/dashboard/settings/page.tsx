@@ -1,4 +1,4 @@
-import { data } from "@/lib/store";
+import { data, db } from "@/lib/store";
 import { currentUser, requireSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,15 +7,18 @@ import { Input, Label } from "@/components/ui/input";
 import { Users, Cog, Palette, KeyRound, Slack } from "lucide-react";
 import { ExportButton } from "./export-button";
 import { RiskWeightsForm } from "./risk-weights-form";
+import { UsersClient } from "./users-client";
+import { LogoutAllButton } from "./logout-all-button";
 
 export default function SettingsPage() {
   const sess = requireSession();
   const user = currentUser()!;
   const org = data.org(sess.orgId)!;
   const settings = data.settings(sess.orgId);
-  const users = data.users(sess.orgId);
+  const users = data.users(sess.orgId).map((u) => ({ ...u, deactivated: db().deactivated.has(u.id) }));
   const canUpdate = can(user.role, "settings.update");
   const canExport = can(user.role, "org.export");
+  const canManageUsers = can(user.role, "user.invite");
 
   const integrations = [
     {
@@ -71,28 +74,33 @@ export default function SettingsPage() {
               <Users className="h-5 w-5 text-primary" />
               <CardTitle>Users & roles</CardTitle>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border">
-              {users.map((u) => (
-                <li
-                  key={u.id}
-                  className="px-5 py-3 flex items-center justify-between text-sm"
-                >
-                  <div>
-                    <div className="font-medium">{u.name}</div>
-                    <div className="text-xs text-muted-foreground">{u.email}</div>
-                  </div>
-                  <Badge variant="muted" className="capitalize">
-                    {u.role.replace("_", " ")}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-            <p className="px-5 py-3 text-xs text-muted-foreground border-t border-border">
-              User invitations are part of the enterprise pilot package. Email
-              the deployment team to provision additional accounts.
+            <p className="text-xs text-muted-foreground">
+              Invite teammates, change roles, and deactivate accounts. Role
+              changes and deactivations immediately revoke the user's sessions.
             </p>
+          </CardHeader>
+          <CardContent>
+            {canManageUsers ? (
+              <UsersClient users={users} currentUserId={user.id} />
+            ) : (
+              <ul className="divide-y divide-border">
+                {users.map((u) => (
+                  <li key={u.id} className="py-3 flex items-center justify-between text-sm">
+                    <div>
+                      <div className="font-medium">{u.name}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </div>
+                    <Badge variant="muted" className="capitalize">{u.role.replace("_", " ")}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                Sign out of every device for your own account.
+              </div>
+              <LogoutAllButton />
+            </div>
           </CardContent>
         </Card>
 
