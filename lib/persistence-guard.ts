@@ -22,12 +22,19 @@ export class PersistenceError extends Error {
 
 export function assertPersistence() {
   const required = process.env.REQUIRE_PERSISTENCE === "true";
-  if (required && !isSupabaseConfigured()) {
+  if (!required) return;
+
+  const missing: string[] = [];
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+  if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!process.env.SESSION_SECRET) missing.push("SESSION_SECRET");
+
+  if (missing.length > 0) {
     throw new PersistenceError(
-      "REQUIRE_PERSISTENCE=true but no durable datastore is configured. " +
-        "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (and " +
-        "complete the data-layer swap in supabase/SWAP.md). Refusing to serve " +
-        "on the in-memory store in production.",
+      `REQUIRE_PERSISTENCE=true but required production env vars are missing: ${missing.join(", ")}. ` +
+        "Refusing to serve on the in-memory store. Configure these and complete " +
+        "the data-layer swap (supabase/SWAP.md), then run `npm run verify:supabase`.",
     );
   }
 }

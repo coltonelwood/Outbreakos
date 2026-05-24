@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --no-warnings --test tests/*.test.ts",
     "db:migrate": "node scripts/migrate.mjs",
-    "db:seed": "node scripts/migrate.mjs --seed"
+    "db:seed": "node scripts/migrate.mjs --seed",
+    "verify:supabase": "node scripts/verify-supabase.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

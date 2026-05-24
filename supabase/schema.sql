@@ -29,8 +29,14 @@ create table if not exists profiles (
   role text not null
     check (role in ('owner','admin','health_officer','screener','viewer')),
   site_id uuid,
+  -- Session revocation: bumping this invalidates all previously-issued
+  -- session cookies for the user (logout-all, role change, password change).
+  session_version int not null default 1,
+  -- Deactivated users cannot authenticate even with a valid cookie.
+  deactivated boolean not null default false,
   created_at timestamptz not null default now()
 );
+create unique index if not exists profiles_email_uniq on profiles(lower(email));
 create index if not exists profiles_org_id_idx on profiles(org_id);
 
 -- ---------------------------------------------------------------------------
@@ -259,9 +265,42 @@ create table if not exists org_settings (
   ai_provider text not null default 'none' check (ai_provider in ('openai','anthropic','none')),
   messaging_provider text not null default 'none' check (messaging_provider in ('twilio','whatsapp','none')),
   risk_weights jsonb not null default '{}'::jsonb,
+  risk_thresholds jsonb not null default '{"monitor":15,"elevated":40,"urgent":70}'::jsonb,
+  onboarding jsonb not null default '{"dismissed":false,"completedSteps":[]}'::jsonb,
   api_keys_masked jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------------
+-- Notifications (delivery records for operational events)
+-- ---------------------------------------------------------------------------
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  channel text not null check (channel in ('slack','email','sms')),
+  target text not null,
+  subject text not null,
+  body text not null,
+  severity text not null check (severity in ('info','warning','high','critical')),
+  status text not null check (status in ('sent','failed','skipped')),
+  error text,
+  retries int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists notifications_org_id_idx on notifications(org_id);
+create index if not exists notifications_created_at_idx on notifications(created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Set-password / invite tokens (one-time use)
+-- ---------------------------------------------------------------------------
+create table if not exists set_password_tokens (
+  token text primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists set_password_tokens_user_idx on set_password_tokens(user_id);
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security
@@ -278,6 +317,8 @@ alter table resources enable row level security;
 alter table reports enable row level security;
 alter table audit_logs enable row level security;
 alter table org_settings enable row level security;
+alter table notifications enable row level security;
+alter table set_password_tokens enable row level security;
 
 -- Helper: get org_id of the authenticated user.
 create or replace function auth_org_id() returns uuid
@@ -293,7 +334,8 @@ declare
 begin
   for t in select unnest(array[
     'profiles','sites','outbreak_regions','cases','screenings',
-    'contacts','alerts','resources','reports','audit_logs','org_settings'
+    'contacts','alerts','resources','reports','audit_logs','org_settings',
+    'notifications'
   ]) loop
     execute format('drop policy if exists tenant_select on %I', t);
     execute format(
