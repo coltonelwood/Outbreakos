@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const site = createSite(sess.orgId, sess.userId, parsed.data);
+  const site = await createSite(sess.orgId, sess.userId, parsed.data);
   return NextResponse.json({ site });
 }
 
@@ -36,5 +36,5 @@ export async function GET() {
   } catch (e) {
     return authErrorResponse(e);
   }
-  return NextResponse.json({ sites: data.sites(sess.orgId) });
+  return NextResponse.json({ sites: await data.sites(sess.orgId) });
 }
