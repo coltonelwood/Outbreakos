@@ -1,20 +1,74 @@
 import { NextResponse } from "next/server";
-import { db, logAudit } from "@/lib/store";
+import { z } from "zod";
+import { addLead } from "@/lib/store";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  // In demo mode we just record an audit event. Wire this to your CRM /
-  // ticketing system in production (HubSpot, Salesforce, Linear, etc.).
-  logAudit("public", "lead.create", "lead", body);
-  // Mirror to console for development visibility
-  console.log("[lead]", body);
-  return NextResponse.json({ ok: true });
+const schema = z.object({
+  email: z.string().email(),
+  name: z.string().max(120).optional(),
+  org: z.string().max(120).optional(),
+  role: z.string().max(120).optional(),
+  audience: z.string().max(60).optional(),
+  intent: z.string().max(60).optional(),
+  message: z.string().max(4000).optional(),
+  source: z.string().max(120).optional(),
+  utm: z.record(z.string().max(500)).optional(),
+  // honeypot — bots fill, humans don't
+  website: z.string().max(0).optional(),
+});
+
+async function notifySlack(payload: Record<string, unknown>) {
+  const url = process.env.LEADS_WEBHOOK_URL;
+  if (!url) return;
+  const text = [
+    `*New OutbreakOS lead*`,
+    `intent: ${payload.intent || "(unknown)"} · audience: ${payload.audience || "(unknown)"}`,
+    `email: ${payload.email}`,
+    payload.org ? `org: ${payload.org}` : null,
+    payload.name ? `name: ${payload.name}` : null,
+    payload.role ? `role: ${payload.role}` : null,
+    payload.message ? `> ${String(payload.message).slice(0, 600)}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch (err) {
+    console.error("[leads] slack webhook failed", err);
+  }
 }
 
-export async function GET() {
-  // Surface recent leads only for operators (audit feed).
-  const leads = db()
-    .audit.filter((a) => a.action === "lead.create")
-    .slice(0, 50);
-  return NextResponse.json({ leads });
+export async function POST(req: Request) {
+  const limit = await rateLimitAsync(clientKey(req, "leads"), { limit: 5, windowSec: 600 });
+  if (!limit.ok) return rateLimitResponse(limit);
+
+  const body = await req.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid form" }, { status: 400 });
+  }
+  // Honeypot — silently 200, do not store, do not notify.
+  if (parsed.data.website && parsed.data.website.length > 0) {
+    return NextResponse.json({ ok: true });
+  }
+  const lead = await addLead({
+    email: parsed.data.email,
+    name: parsed.data.name,
+    org: parsed.data.org,
+    role: parsed.data.role,
+    audience: parsed.data.audience,
+    intent: parsed.data.intent,
+    message: parsed.data.message,
+    source: parsed.data.source || "web",
+    utm: parsed.data.utm,
+  });
+  // Fire-and-forget so the user gets a fast response even if Slack is slow.
+  notifySlack(parsed.data).catch(() => {});
+  // The lead row itself is the durable record (leads are global, not
+  // org-scoped, so they are not written to the org-scoped audit log).
+  return NextResponse.json({ ok: true, leadId: lead.id });
 }

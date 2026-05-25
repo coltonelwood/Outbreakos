@@ -94,7 +94,11 @@ export function AICommandClient() {
                   : "bg-muted",
               )}
             >
-              <pre className="whitespace-pre-wrap font-sans">{m.text}</pre>
+              {m.role === "assistant" ? (
+                <MarkdownView text={m.text} citations={m.citations} />
+              ) : (
+                <p className="whitespace-pre-wrap">{m.text}</p>
+              )}
               {m.role === "assistant" && m.citations && m.citations.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border/60">
                   <p className="text-xs text-muted-foreground mb-1">Internal data cited:</p>
@@ -148,4 +152,104 @@ export function AICommandClient() {
       </form>
     </div>
   );
+}
+
+// Minimal markdown renderer tuned for the AI assistant's structured output.
+// Supports: blank-line paragraphs, leading "•" / "-" / "*" / "1." bullets,
+// **bold**, `code`, and inline citation chips for tokens that look like
+// internal IDs (region:..., site:..., screening:..., alert:..., resource:...,
+// settings:..., scr_..., al_..., r_..., site_..., reg_..., rpt_..., ct_...).
+function MarkdownView({ text, citations }: { text: string; citations?: string[] }) {
+  const citationSet = new Set(citations || []);
+  const blocks = text.split(/\n{2,}/);
+  return (
+    <div className="space-y-2 leading-relaxed">
+      {blocks.map((block, i) => {
+        const lines = block.split("\n");
+        const isBulletList = lines.every((l) => /^\s*([•\-*]|\d+\.)\s+/.test(l));
+        if (isBulletList) {
+          return (
+            <ul key={i} className="space-y-1 pl-1">
+              {lines.map((l, j) => {
+                const stripped = l.replace(/^\s*([•\-*]|\d+\.)\s+/, "");
+                return (
+                  <li key={j} className="flex gap-2">
+                    <span className="text-primary mt-1 text-[10px]">●</span>
+                    <span className="flex-1">{renderInline(stripped, citationSet)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+        // Treat single-line all-caps short blocks as headings.
+        if (lines.length === 1 && lines[0].length < 80 && /^[A-Z][A-Za-z ()/]+$/.test(lines[0])) {
+          return (
+            <h4 key={i} className="text-xs font-semibold uppercase tracking-wider text-primary mt-2">
+              {lines[0]}
+            </h4>
+          );
+        }
+        return (
+          <p key={i} className="whitespace-pre-line">
+            {lines.map((l, j) => (
+              <span key={j}>
+                {renderInline(l, citationSet)}
+                {j < lines.length - 1 ? <br /> : null}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+const ID_RE = /\b(?:[a-z]+:)?(?:scr|al|r|site|reg|rpt|ct|u|org|lead|a)_[a-z0-9]{4,}\b/gi;
+const BOLD_RE = /\*\*([^*]+)\*\*/g;
+const CODE_RE = /`([^`]+)`/g;
+
+function renderInline(s: string, citationSet: Set<string>): React.ReactNode {
+  // Cheap-and-correct: tokenize on bold + code + IDs.
+  const out: React.ReactNode[] = [];
+  let rest = s;
+  let key = 0;
+  while (rest.length) {
+    const m = rest.match(BOLD_RE) || rest.match(CODE_RE) || rest.match(ID_RE);
+    if (!m) {
+      out.push(<span key={key++}>{rest}</span>);
+      break;
+    }
+    const idx = rest.indexOf(m[0]);
+    if (idx > 0) out.push(<span key={key++}>{rest.slice(0, idx)}</span>);
+    const token = m[0];
+    if (token.startsWith("**")) {
+      out.push(
+        <strong key={key++}>{token.slice(2, -2)}</strong>,
+      );
+    } else if (token.startsWith("`")) {
+      out.push(
+        <code key={key++} className="text-xs bg-background/40 px-1 rounded">
+          {token.slice(1, -1)}
+        </code>,
+      );
+    } else {
+      const cited = citationSet.has(token);
+      out.push(
+        <span
+          key={key++}
+          className={
+            "inline-block rounded-md px-1.5 py-0 mx-0.5 text-[11px] font-mono border align-baseline " +
+            (cited
+              ? "bg-primary/15 text-primary border-primary/30"
+              : "bg-muted text-muted-foreground border-border")
+          }
+        >
+          {token}
+        </span>,
+      );
+    }
+    rest = rest.slice(idx + token.length);
+  }
+  return out;
 }

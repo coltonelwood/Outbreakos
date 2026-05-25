@@ -1,9 +1,11 @@
-import { db } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { data } from "@/lib/store";
+import { requireSession } from "@/lib/auth";
+import { Card, CardContent } from "@/components/ui/card";
 import { AlertsClient } from "./alerts-client";
 
-export default function AlertsPage() {
-  const d = db();
+export default async function AlertsPage() {
+  const sess = requireSession();
+  const [alerts, users] = await Promise.all([data.alerts(sess.orgId), data.users(sess.orgId)]);
   return (
     <div className="space-y-4">
       <div>
@@ -15,7 +17,7 @@ export default function AlertsPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {(["critical", "high", "warning", "info"] as const).map((sev) => {
-          const count = d.alerts.filter((a) => a.severity === sev && a.status === "open").length;
+          const count = alerts.filter((a) => a.severity === sev && a.status === "open").length;
           return (
             <Card key={sev}>
               <CardContent className="p-4">
@@ -28,7 +30,7 @@ export default function AlertsPage() {
         })}
       </div>
 
-      <AlertsClient alerts={d.alerts} />
+      <AlertsClient alerts={alerts} users={users} />
     </div>
   );
 }

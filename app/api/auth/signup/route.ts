@@ -1,23 +1,49 @@
 import { NextResponse } from "next/server";
-import { db, logAudit } from "@/lib/store";
+import { z } from "zod";
+import { createOrg, createUser, userByEmail, logAudit } from "@/lib/store";
 import { setSession } from "@/lib/auth";
-import { uid } from "@/lib/utils";
+import { clientKey, rateLimitAsync, rateLimitResponse } from "@/lib/ratelimit";
+import type { OpsMode } from "@/lib/types";
+
+const schema = z.object({
+  org: z.string().min(2).max(120),
+  mode: z
+    .enum(["standard", "mining_site", "airport_poe", "gov_emergency", "ngo_field"])
+    .default("standard"),
+  name: z.string().min(2).max(120),
+  email: z.string().email(),
+  password: z.string().min(8).max(256),
+});
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  // Demo mode: attach to existing demo org so user lands on the seeded scenario.
-  const orgId = db().org.id;
-  const userId = uid("u");
-  const profile = {
-    id: userId,
-    orgId,
-    email: String(body.email || ""),
-    name: String(body.name || ""),
-    role: "owner" as const,
-    createdAt: new Date().toISOString(),
-  };
-  db().users.unshift(profile);
-  setSession({ userId, role: "owner", orgId });
-  logAudit(userId, "auth.signup", userId, { org: body.org, mode: body.mode });
-  return NextResponse.json({ ok: true });
+  const limit = await rateLimitAsync(clientKey(req, "signup"), { limit: 3, windowSec: 600 });
+  if (!limit.ok) return rateLimitResponse(limit);
+
+  const parsed = schema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const v = parsed.data;
+
+  // Email uniqueness — single tenant per email in demo mode. Real auth
+  // (Supabase) handles this with a unique constraint.
+  if (await userByEmail(v.email)) {
+    return NextResponse.json(
+      { error: "An account with that email already exists." },
+      { status: 409 },
+    );
+  }
+
+  // CRITICAL: new organization per signup. The signing-up user becomes the
+  // owner of *their own* org. They never see another tenant's data.
+  const org = await createOrg(v.org, v.mode as OpsMode);
+  const user = await createUser(
+    org.id,
+    { email: v.email, name: v.name, role: "owner" },
+    v.password,
+  );
+  await setSession({ userId: user.id, role: user.role, orgId: org.id });
+  await logAudit(org.id, user.id, "org.create", org.id, { mode: v.mode });
+  await logAudit(org.id, user.id, "auth.signup", user.id);
+  return NextResponse.json({ ok: true, orgId: org.id });
 }

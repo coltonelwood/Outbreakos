@@ -13,60 +13,102 @@ import {
   Cog,
   FileText,
   Home,
+  Inbox,
   Map,
   Menu,
   ScrollText,
   ShieldAlert,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Role } from "@/lib/types";
+import { can } from "@/lib/permissions";
 
-const groups = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof Home;
+  requires?: Parameters<typeof can>[1];
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+  internal?: boolean;
+}
+
+const groups: NavGroup[] = [
   {
     label: "Operations",
     items: [
       { href: "/dashboard", label: "Overview", icon: Home },
       { href: "/dashboard/map", label: "Outbreak Map", icon: Map },
-      { href: "/dashboard/screenings", label: "Screenings", icon: ClipboardCheck },
-      { href: "/dashboard/contacts", label: "Contact Monitoring", icon: Users },
-      { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
-      { href: "/dashboard/resources", label: "Resources", icon: Boxes },
+      { href: "/dashboard/screenings", label: "Screenings", icon: ClipboardCheck, requires: "screening.read" },
+      { href: "/dashboard/contacts", label: "Contact Monitoring", icon: Users, requires: "contact.read" },
+      { href: "/dashboard/alerts", label: "Alerts", icon: Bell, requires: "alert.read" },
+      { href: "/dashboard/resources", label: "Resources", icon: Boxes, requires: "resource.read" },
     ],
   },
   {
     label: "Intelligence",
     items: [
-      { href: "/dashboard/reports", label: "Situation Reports", icon: FileText },
-      { href: "/dashboard/ai", label: "AI Command", icon: Brain },
+      { href: "/dashboard/reports", label: "Situation Reports", icon: FileText, requires: "report.read" },
+      { href: "/dashboard/ai", label: "AI Command", icon: Brain, requires: "ai.invoke" },
       { href: "/dashboard/command", label: "Multi-site Command", icon: ShieldAlert },
     ],
   },
   {
     label: "Admin",
     items: [
-      { href: "/dashboard/sites", label: "Sites", icon: Building2 },
-      { href: "/dashboard/settings", label: "Settings", icon: Cog },
-      { href: "/dashboard/audit", label: "Audit Log", icon: ScrollText },
+      { href: "/dashboard/sites", label: "Sites", icon: Building2, requires: "settings.read" },
+      { href: "/dashboard/settings", label: "Settings", icon: Cog, requires: "settings.read" },
+      { href: "/dashboard/audit", label: "Audit Log", icon: ScrollText, requires: "audit.read" },
+      { href: "/dashboard/leads", label: "Leads", icon: Inbox, requires: "lead.read" },
     ],
   },
   {
-    label: "Sales kit",
-    items: [
-      { href: "/dashboard/demo-script", label: "Demo Script", icon: ShieldAlert },
-    ],
+    label: "Internal",
+    internal: true,
+    items: [{ href: "/dashboard/demo-script", label: "Demo Script", icon: Sparkles }],
   },
 ];
 
-export function Sidebar({ orgName }: { orgName: string }) {
+interface Props {
+  orgName: string;
+  role: Role;
+  isDemoOrg: boolean;
+}
+
+export function Sidebar({ orgName, role, isDemoOrg }: Props) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Filter groups + items based on role and whether internal/demo content is allowed.
+  const visibleGroups = groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => !i.requires || can(role, i.requires)),
+    }))
+    .filter((g) => {
+      if (g.items.length === 0) return false;
+      if (g.internal) {
+        // Internal/sales-kit content only for owner/admin and only on the seeded demo org.
+        return isDemoOrg && (role === "owner" || role === "admin");
+      }
+      return true;
+    });
 
   const NavContent = (
     <>
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2"
+            onClick={() => setMobileOpen(false)}
+          >
             <div className="relative">
               <Activity className="h-5 w-5 text-primary" />
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-primary/30" />
@@ -84,7 +126,7 @@ export function Sidebar({ orgName }: { orgName: string }) {
         <div className="mt-2 text-xs text-muted-foreground truncate">{orgName}</div>
       </div>
       <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 space-y-6">
-        {groups.map((g) => (
+        {visibleGroups.map((g) => (
           <div key={g.label}>
             <div className="px-4 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               {g.label}
@@ -114,14 +156,13 @@ export function Sidebar({ orgName }: { orgName: string }) {
         ))}
       </nav>
       <div className="p-4 border-t border-border text-[11px] text-muted-foreground">
-        <p>OutbreakOS is an operational platform, not a medical diagnostic device.</p>
+        <p>Operational health-security platform. Not a medical diagnostic device.</p>
       </div>
     </>
   );
 
   return (
     <>
-      {/* Mobile trigger — fixed to the top-left, visible only on small screens */}
       <button
         className="lg:hidden fixed top-3 left-3 z-50 rounded-md border border-border bg-card/90 backdrop-blur p-2 text-foreground shadow-lg"
         onClick={() => setMobileOpen(true)}
@@ -129,8 +170,6 @@ export function Sidebar({ orgName }: { orgName: string }) {
       >
         <Menu className="h-5 w-5" />
       </button>
-
-      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div
@@ -143,8 +182,6 @@ export function Sidebar({ orgName }: { orgName: string }) {
           </aside>
         </div>
       )}
-
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-border bg-card/40 h-screen sticky top-0">
         {NavContent}
       </aside>

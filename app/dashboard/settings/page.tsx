@@ -1,23 +1,58 @@
-import { db } from "@/lib/store";
+import { data, isDeactivated } from "@/lib/store";
+import { currentUser, requireSession } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input, Label, Select } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Download, KeyRound, Users, Cog, Palette } from "lucide-react";
-import Link from "next/link";
+import { Input, Label } from "@/components/ui/input";
+import { Users, Cog, Palette, KeyRound, Slack } from "lucide-react";
 import { ExportButton } from "./export-button";
+import { RiskWeightsForm } from "./risk-weights-form";
+import { UsersClient } from "./users-client";
+import { LogoutAllButton } from "./logout-all-button";
 
-export default function SettingsPage() {
-  const d = db();
-  const s = d.settings;
+export default async function SettingsPage() {
+  const sess = requireSession();
+  const [userRaw, orgRaw, settings, userList] = await Promise.all([
+    currentUser(), data.org(sess.orgId), data.settings(sess.orgId), data.users(sess.orgId),
+  ]);
+  const user = userRaw!;
+  const org = orgRaw!;
+  const users = await Promise.all(
+    userList.map(async (u) => ({ ...u, deactivated: await isDeactivated(u.id) })),
+  );
+  const canUpdate = can(user.role, "settings.update");
+  const canExport = can(user.role, "org.export");
+  const canManageUsers = can(user.role, "user.invite");
+
+  const integrations = [
+    {
+      name: "Slack (leads + alerts)",
+      status: process.env.LEADS_WEBHOOK_URL ? "live" : "not configured",
+      description: "Routes new leads and high-severity alerts to a Slack channel.",
+    },
+    {
+      name: "AI provider",
+      status: settings.aiProvider === "none" ? "deterministic fallback" : `live (${settings.aiProvider})`,
+      description: "Generates briefings, summaries, drafts. Configure via AI_PROVIDER env var.",
+    },
+    {
+      name: "Messaging (SMS / WhatsApp)",
+      status: settings.messagingProvider === "none" ? "templates only" : `live (${settings.messagingProvider})`,
+      description: "Sends contact monitoring check-ins. Templates always available; live send requires provider keys.",
+    },
+    {
+      name: "Supabase database",
+      status: process.env.NEXT_PUBLIC_SUPABASE_URL ? "live" : "in-memory demo store",
+      description: "Persistent multi-tenant data layer. Schema in /supabase/schema.sql.",
+    },
+  ];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground text-sm">
-          Organization profile, users and roles, AI / messaging providers, risk
-          scoring, branding, and data export.
+          Organization profile, users and roles, providers, risk scoring, branding, and data export.
         </p>
       </div>
 
@@ -30,10 +65,10 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Field label="Organization name" value={d.org.name} />
-            <Field label="Slug" value={d.org.slug} />
-            <Field label="Operating mode" value={d.org.mode.replace("_", " ")} />
-            <Field label="Created" value={d.org.createdAt} />
+            <Field label="Organization name" value={org.name} />
+            <Field label="Slug" value={org.slug} />
+            <Field label="Operating mode" value={org.mode.replace("_", " ")} />
+            <Field label="Created" value={org.createdAt} />
           </CardContent>
         </Card>
 
@@ -43,61 +78,69 @@ export default function SettingsPage() {
               <Users className="h-5 w-5 text-primary" />
               <CardTitle>Users & roles</CardTitle>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Invite teammates, change roles, and deactivate accounts. Role
+              changes and deactivations immediately revoke the user's sessions.
+            </p>
           </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border">
-              {d.users.map((u) => (
-                <li key={u.id} className="px-5 py-3 flex items-center justify-between text-sm">
-                  <div>
-                    <div className="font-medium">{u.name}</div>
-                    <div className="text-xs text-muted-foreground">{u.email}</div>
-                  </div>
-                  <Badge variant="muted" className="capitalize">{u.role.replace("_", " ")}</Badge>
-                </li>
-              ))}
-            </ul>
+          <CardContent>
+            {canManageUsers ? (
+              <UsersClient users={users} currentUserId={user.id} />
+            ) : (
+              <ul className="divide-y divide-border">
+                {users.map((u) => (
+                  <li key={u.id} className="py-3 flex items-center justify-between text-sm">
+                    <div>
+                      <div className="font-medium">{u.name}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </div>
+                    <Badge variant="muted" className="capitalize">{u.role.replace("_", " ")}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                Sign out of every device for your own account.
+              </div>
+              <LogoutAllButton />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-primary" />
-              <CardTitle>Providers</CardTitle>
+              <Slack className="h-5 w-5 text-primary" />
+              <CardTitle>Integrations</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>AI provider</Label>
-              <Select defaultValue={s.aiProvider} disabled>
-                <option value="none">None (deterministic templates)</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Configure via the <code>AI_PROVIDER</code> env var. Keys are
-                server-only and never exposed to the browser.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Messaging provider</Label>
-              <Select defaultValue={s.messagingProvider} disabled>
-                <option value="none">None (templates only)</option>
-                <option value="twilio">Twilio</option>
-                <option value="whatsapp">WhatsApp Business</option>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Stored API keys</Label>
-              <ul className="space-y-1.5">
-                {s.apiKeysMasked.map((k) => (
-                  <li key={k.name} className="text-sm flex items-center justify-between rounded-md border border-border px-3 py-2">
-                    <span>{k.name}</span>
-                    <code className="text-xs text-muted-foreground">…{k.lastFour}</code>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <CardContent>
+            <ul className="space-y-2">
+              {integrations.map((i) => (
+                <li
+                  key={i.name}
+                  className="flex items-start justify-between gap-3 rounded-md border border-border p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{i.name}</div>
+                    <div className="text-xs text-muted-foreground">{i.description}</div>
+                  </div>
+                  <Badge
+                    variant={
+                      i.status.startsWith("live") ? "success" : "muted"
+                    }
+                    className="shrink-0"
+                  >
+                    {i.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Only integrations that are actually configured are listed. To enable
+              more, set the corresponding environment variable and redeploy.
+            </p>
           </CardContent>
         </Card>
 
@@ -105,35 +148,42 @@ export default function SettingsPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Palette className="h-5 w-5 text-primary" />
-              <CardTitle>Branding & risk scoring</CardTitle>
+              <CardTitle>Branding</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Branding</Label>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="inline-flex h-8 w-8 rounded-md" style={{ background: d.org.branding.primary }} />
-                <span>{d.org.branding.logoText}</span>
-              </div>
+          <CardContent>
+            <div className="flex items-center gap-3 text-sm">
+              <span
+                className="inline-flex h-10 w-10 rounded-md items-center justify-center font-bold text-primary-foreground"
+                style={{ background: org.branding.primary }}
+              >
+                {org.branding.logoText.slice(0, 2)}
+              </span>
+              <span>{org.branding.logoText}</span>
             </div>
-            <div className="space-y-1.5">
-              <Label>Risk scoring weights</Label>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                {Object.entries(s.riskWeights).map(([k, v]) => (
-                  <div key={k} className="flex justify-between rounded-md border border-border px-3 py-2">
-                    <span className="capitalize text-muted-foreground">{k}</span>
-                    <span className="font-medium tabular-nums">+{v}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Defaults shown. Weight adjustments in production require admin
-                role and are recorded in the audit log.
-              </p>
-            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Per-tenant branding is applied to SITREPs and the print/PDF report header.
+              Logo upload is part of the enterprise pilot package.
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-primary" />
+            <CardTitle>Operational risk scoring</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Transparent and configurable. Every change is recorded in the audit log.
+            These weights drive the operational triage tier (not a diagnosis).
+          </p>
+        </CardHeader>
+        <CardContent>
+          <RiskWeightsForm initial={settings.riskWeights} disabled={!canUpdate} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -141,11 +191,15 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Export this organization's screenings, contacts, alerts, resources,
-            and audit log as JSON. Use for after-action reviews, ministry data
-            requests, or migration to another platform.
+            Owners can export this organization's screenings, contacts, alerts,
+            resources, and audit log as JSON. Use for after-action reviews,
+            ministry data requests, or migration to another platform.
           </p>
-          <ExportButton />
+          {canExport ? (
+            <ExportButton />
+          ) : (
+            <Badge variant="muted">Owner only</Badge>
+          )}
         </CardContent>
       </Card>
     </div>

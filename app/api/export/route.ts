@@ -1,27 +1,30 @@
 import { NextResponse } from "next/server";
-import { db, logAudit } from "@/lib/store";
-import { getSession } from "@/lib/auth";
+import { data, logAudit } from "@/lib/store";
+import { authErrorResponse, requireCapability } from "@/lib/auth";
 
 export async function GET() {
-  const session = getSession();
-  const d = db();
+  let sess;
+  try {
+    sess = requireCapability("org.export");
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+  const orgId = sess.orgId;
+  const [org, users, sites, regions, cases, screenings, contacts, alerts, resources, reports, audit, settings] =
+    await Promise.all([
+      data.org(orgId), data.users(orgId), data.sites(orgId), data.regions(orgId),
+      data.cases(orgId), data.screenings(orgId), data.contacts(orgId), data.alerts(orgId),
+      data.resources(orgId), data.reports(orgId), data.audit(orgId), data.settings(orgId),
+    ]);
   const payload = {
     exportedAt: new Date().toISOString(),
-    org: d.org,
-    users: d.users,
-    sites: d.sites,
-    regions: d.regions,
-    cases: d.cases,
-    screenings: d.screenings,
-    contacts: d.contacts,
-    alerts: d.alerts,
-    resources: d.resources,
-    reports: d.reports,
-    audit: d.audit,
-    settings: d.settings,
+    org, users, sites, regions, cases, screenings, contacts, alerts, resources, reports, audit, settings,
   };
-  logAudit(session?.userId || "system", "org.export", d.org.id);
+  await logAudit(orgId, sess.userId, "org.export", orgId);
   return new NextResponse(JSON.stringify(payload, null, 2), {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Disposition": `attachment; filename="outbreakos-${orgId}-${new Date().toISOString().slice(0, 10)}.json"`,
+    },
   });
 }

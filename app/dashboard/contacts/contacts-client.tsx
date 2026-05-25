@@ -11,10 +11,12 @@ import { UserPlus, MessageSquare, AlertTriangle, CheckCircle2 } from "lucide-rea
 import type { Contact } from "@/lib/types";
 
 const TEMPLATES = {
-  daily: "OutbreakOS daily check-in: please reply 1=I am well, 2=I have new symptoms. If 2, we will contact you within the hour.",
-  missed: "OutbreakOS: we missed your daily check-in. Please reply with your status (1=well, 2=new symptoms). A team member is available if you need help.",
+  daily:
+    "OutbreakOS daily check-in: please reply 1=I am well, 2=I have new symptoms. If 2, a team member will contact you within the hour.",
+  missed:
+    "OutbreakOS: we missed your daily check-in. Please reply with your status (1=well, 2=new symptoms). A team member is available if you need help.",
   escalation:
-    "OutbreakOS: based on your check-in we are routing a clinical team to follow up with you. Please remain reachable on this number.",
+    "OutbreakOS: based on your last check-in we are routing a clinical team to follow up with you. Please remain reachable on this number.",
   cleared:
     "OutbreakOS: you have completed your 21-day monitoring window with no symptoms. Thank you for participating. Stay well.",
 };
@@ -26,11 +28,11 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
   const [templateOpen, setTemplateOpen] = useState<string | null>(null);
   const [selected, setSelected] = useState<Contact | null>(initial[0] ?? null);
 
-  async function addContact(data: { name: string; phone: string; notes: string }) {
+  async function addContact(d: { name: string; phone: string; notes: string }) {
     const r = await fetch("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(d),
     });
     const j = await r.json();
     if (r.ok && j.contact) {
@@ -47,15 +49,54 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
       body: JSON.stringify({ status }),
     });
     if (r.ok) {
-      setContacts((c) => c.map((x) => (x.id === id ? { ...x, status } : x)));
-      if (selected?.id === id) setSelected((s) => (s ? { ...s, status } : s));
+      const j = await r.json();
+      setContacts((c) => c.map((x) => (x.id === id ? j.contact : x)));
+      if (selected?.id === id) setSelected(j.contact);
       router.refresh();
     }
+  }
+
+  async function logCheckin(id: string, day: number, status: "ok" | "symptom" | "missed") {
+    const r = await fetch(`/api/contacts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkin: { day, status } }),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      setContacts((c) => c.map((x) => (x.id === id ? j.contact : x)));
+      if (selected?.id === id) setSelected(j.contact);
+      router.refresh();
+    }
+  }
+
+  function exportCsv() {
+    const rows = [
+      ["id", "name", "phone", "status", "monitoring_start", "monitoring_end", "notes"],
+      ...contacts.map((c) => [
+        c.id,
+        c.name,
+        c.phone || "",
+        c.status,
+        c.monitoringStart,
+        c.monitoringEnd,
+        (c.notes || "").replace(/[\r\n,]/g, " "),
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={exportCsv}>Export CSV</Button>
         <Button onClick={() => setShowAdd(!showAdd)}>
           <UserPlus className="h-4 w-4" /> Add contact
         </Button>
@@ -74,38 +115,42 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
         <Card>
           <CardHeader><CardTitle>Contacts ({contacts.length})</CardTitle></CardHeader>
           <CardContent className="p-0 max-h-[600px] overflow-y-auto scrollbar-thin">
-            <ul className="divide-y divide-border">
-              {contacts.map((c) => (
-                <li
-                  key={c.id}
-                  onClick={() => setSelected(c)}
-                  className={cn(
-                    "p-4 cursor-pointer hover:bg-muted/30 transition-colors",
-                    selected?.id === c.id && "bg-muted/40 border-l-2 border-primary",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{c.name}</div>
-                    <ContactStatusPill status={c.status} />
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {c.phone || "no phone"} · enrolled {formatDate(c.monitoringStart)}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {contacts.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-5">No contacts yet.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {contacts.map((c) => (
+                  <li
+                    key={c.id}
+                    onClick={() => setSelected(c)}
+                    className={cn(
+                      "p-4 cursor-pointer hover:bg-muted/30 transition-colors",
+                      selected?.id === c.id && "bg-muted/40 border-l-2 border-primary",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium">{c.name}</div>
+                      <ContactStatusPill status={c.status} />
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {c.phone || "no phone"} · enrolled {formatDate(c.monitoringStart)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              {selected ? selected.name : "Select a contact"}
-            </CardTitle>
+            <CardTitle>{selected ? selected.name : "Select a contact"}</CardTitle>
           </CardHeader>
           <CardContent>
             {!selected && (
-              <p className="text-sm text-muted-foreground">Pick a contact from the list to see their 21-day timeline.</p>
+              <p className="text-sm text-muted-foreground">
+                Pick a contact from the list to see their 21-day timeline and log today's check-in.
+              </p>
             )}
             {selected && (
               <div className="space-y-5">
@@ -118,49 +163,68 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
                 <p className="text-sm text-muted-foreground">{selected.notes}</p>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    21-day timeline
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      21-day timeline (click a day to log)
+                    </p>
+                  </div>
                   <div className="grid grid-cols-7 gap-1.5">
                     {Array.from({ length: 21 }, (_, i) => i + 1).map((day) => {
                       const ci = selected.checkins.find((c) => c.day === day);
                       const stateClass = !ci
-                        ? "bg-muted/40 text-muted-foreground"
+                        ? "bg-muted/40 text-muted-foreground hover:bg-muted/70"
                         : ci.status === "ok"
                           ? "bg-[hsl(var(--success))]/20 text-[hsl(var(--success))]"
                           : ci.status === "symptom"
                             ? "bg-destructive/20 text-destructive"
                             : "bg-[hsl(var(--warning))]/20 text-[hsl(var(--warning))]";
                       return (
-                        <div
+                        <CheckinCell
                           key={day}
-                          title={ci ? `Day ${day}: ${ci.status}` : `Day ${day}: not yet`}
-                          className={cn(
-                            "aspect-square rounded-md flex items-center justify-center text-[10px] font-medium",
-                            stateClass,
-                          )}
-                        >
-                          {day}
-                        </div>
+                          day={day}
+                          currentStatus={ci?.status}
+                          onLog={(status) => logCheckin(selected.id, day, status)}
+                          stateClass={stateClass}
+                        />
                       );
                     })}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[hsl(var(--success))]" /> OK</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-destructive" /> Symptom</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[hsl(var(--warning))]" /> Missed</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-muted/60" /> Pending</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-[hsl(var(--success))]" /> OK
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-destructive" /> Symptom
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-[hsl(var(--warning))]" /> Missed
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-muted/60" /> Pending
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="destructive" onClick={() => updateStatus(selected.id, "escalated")}>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => updateStatus(selected.id, "escalated")}
+                  >
                     <AlertTriangle className="h-4 w-4" /> Escalate
                   </Button>
-                  <Button size="sm" variant="success" onClick={() => updateStatus(selected.id, "cleared")}>
+                  <Button
+                    size="sm"
+                    variant="success"
+                    onClick={() => updateStatus(selected.id, "cleared")}
+                  >
                     <CheckCircle2 className="h-4 w-4" /> Mark cleared
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setTemplateOpen(templateOpen ? null : "daily")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setTemplateOpen(templateOpen ? null : "daily")}
+                  >
                     <MessageSquare className="h-4 w-4" /> Message templates
                   </Button>
                 </div>
@@ -174,7 +238,9 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
                           onClick={() => setTemplateOpen(k)}
                           className={cn(
                             "rounded-md px-2.5 py-1 text-xs font-medium",
-                            templateOpen === k ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground",
+                            templateOpen === k
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-card text-muted-foreground hover:text-foreground",
                           )}
                         >
                           {k}
@@ -183,8 +249,8 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
                     </div>
                     <p className="text-sm">{TEMPLATES[templateOpen as keyof typeof TEMPLATES]}</p>
                     <p className="text-xs text-muted-foreground">
-                      SMS / WhatsApp routing through the configured messaging
-                      provider. In demo mode messages are not actually sent.
+                      SMS / WhatsApp routing requires a configured messaging provider.
+                      In demo mode messages are not sent.
                     </p>
                   </div>
                 )}
@@ -193,6 +259,50 @@ export function ContactsClient({ contacts: initial }: { contacts: Contact[] }) {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function CheckinCell({
+  day,
+  currentStatus,
+  onLog,
+  stateClass,
+}: {
+  day: number;
+  currentStatus?: "ok" | "symptom" | "missed";
+  onLog: (s: "ok" | "symptom" | "missed") => void;
+  stateClass: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        title={`Day ${day}${currentStatus ? `: ${currentStatus}` : ": not yet logged"}`}
+        className={cn(
+          "aspect-square w-full rounded-md flex items-center justify-center text-[10px] font-medium transition-colors",
+          stateClass,
+        )}
+      >
+        {day}
+      </button>
+      {open && (
+        <div className="absolute z-10 top-full left-0 mt-1 rounded-md border border-border bg-card shadow-lg p-1 flex gap-0.5">
+          {(["ok", "symptom", "missed"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                onLog(s);
+                setOpen(false);
+              }}
+              className="text-xs px-2 py-1 rounded hover:bg-muted capitalize"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

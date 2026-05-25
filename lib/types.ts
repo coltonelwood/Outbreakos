@@ -67,6 +67,7 @@ export interface Site {
 
 export interface OutbreakRegion {
   id: string;
+  orgId: string;
   name: string;
   country: string;
   lat: number;
@@ -208,5 +209,10 @@ export interface OrgSettings {
     hcw: number;
     funeral: number;
   };
+  riskThresholds: { monitor: number; elevated: number; urgent: number };
   apiKeysMasked: { name: string; lastFour: string }[];
+  onboarding: {
+    dismissed: boolean;
+    completedSteps: string[];
+  };
 }

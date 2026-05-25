@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { db } from "@/lib/store";
+import { data } from "@/lib/store";
+import { requireSession } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrintButton } from "@/components/app/print-button";
 import { Badge } from "@/components/ui/badge";
@@ -9,28 +10,49 @@ import { formatDateTime } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { RegenerateButton } from "./regenerate-button";
 
-export default function ReportDetail({ params }: { params: { id: string } }) {
-  const d = db();
-  const r = d.reports.find((x) => x.id === params.id);
+export default async function ReportDetail({ params }: { params: { id: string } }) {
+  const sess = requireSession();
+  const r = (await data.reports(sess.orgId)).find((x) => x.id === params.id);
   if (!r) notFound();
+  const org = (await data.org(sess.orgId))!;
 
   return (
     <div className="space-y-4 print-page">
       <div className="flex items-center justify-between gap-3 no-print">
-        <Link href="/dashboard/reports" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+        <Link
+          href="/dashboard/reports"
+          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+        >
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <div className="flex gap-2">
           <RegenerateButton kind={r.kind} />
-          <PrintButton label="Print / save PDF" />
+          <a
+            href={`/api/reports/${r.id}/pdf`}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            Download PDF
+          </a>
+          <PrintButton label="Print" />
         </div>
       </div>
 
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">{r.title}</h1>
-        <p className="text-sm text-muted-foreground">
-          Generated {formatDateTime(r.generatedAt)} · {r.aiAssisted ? "AI-assisted" : "Template-built"} · {d.org.name}
-        </p>
+      {/* Branded header (visible in print too) */}
+      <div className="rounded-lg border border-border bg-card p-5 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-primary">{org.name}</p>
+          <h1 className="text-2xl md:text-3xl font-bold">{r.title}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Generated {formatDateTime(r.generatedAt)} ·{" "}
+            {r.aiAssisted ? "AI-assisted" : "Template-built"}
+          </p>
+        </div>
+        <div
+          className="h-12 w-12 rounded-md flex items-center justify-center font-bold text-primary-foreground"
+          style={{ background: org.branding.primary }}
+        >
+          {org.branding.logoText.slice(0, 2)}
+        </div>
       </div>
 
       <NotADiagnosticBanner />
@@ -61,27 +83,35 @@ export default function ReportDetail({ params }: { params: { id: string } }) {
         <Card>
           <CardHeader><CardTitle>Hotspots</CardTitle></CardHeader>
           <CardContent>
-            <ul className="space-y-1.5 text-sm">
-              {r.hotspots.map((h) => (
-                <li key={h} className="flex items-start gap-2">
-                  <Badge variant="warning">·</Badge>
-                  <span>{h}</span>
-                </li>
-              ))}
-            </ul>
+            {r.hotspots.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No hotspots flagged.</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {r.hotspots.map((h) => (
+                  <li key={h} className="flex items-start gap-2">
+                    <Badge variant="warning">·</Badge>
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Open risks</CardTitle></CardHeader>
           <CardContent>
-            <ul className="space-y-1.5 text-sm">
-              {r.openRisks.map((rk) => (
-                <li key={rk} className="flex items-start gap-2">
-                  <Badge variant="critical">·</Badge>
-                  <span>{rk}</span>
-                </li>
-              ))}
-            </ul>
+            {r.openRisks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open high-severity risks.</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {r.openRisks.map((rk) => (
+                  <li key={rk} className="flex items-start gap-2">
+                    <Badge variant="critical">·</Badge>
+                    <span>{rk}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -98,7 +128,7 @@ export default function ReportDetail({ params }: { params: { id: string } }) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Changes since last report</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Changes since last window</CardTitle></CardHeader>
         <CardContent>
           <ul className="space-y-1.5 text-sm text-muted-foreground">
             {r.changesSinceLast.map((c) => (
@@ -107,6 +137,12 @@ export default function ReportDetail({ params }: { params: { id: string } }) {
           </ul>
         </CardContent>
       </Card>
+
+      {/* Branded footer */}
+      <div className="text-center text-xs text-muted-foreground pt-4 border-t border-border">
+        Generated by OutbreakOS · {org.name} · {formatDateTime(r.generatedAt)} · operational
+        workflow output, not a clinical diagnosis · human review required
+      </div>
     </div>
   );
 }

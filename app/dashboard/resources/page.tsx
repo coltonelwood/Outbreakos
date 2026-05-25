@@ -1,13 +1,15 @@
-import { db } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { data } from "@/lib/store";
+import { requireSession } from "@/lib/auth";
+import { Card, CardContent } from "@/components/ui/card";
 import { ResourcesClient } from "./resources-client";
 import { Boxes, AlertTriangle, TrendingDown } from "lucide-react";
 
-export default function ResourcesPage() {
-  const d = db();
-  const totalItems = d.resources.length;
-  const lowStock = d.resources.filter((r) => r.onHand < r.minStock).length;
-  const criticalDays = d.resources
+export default async function ResourcesPage() {
+  const sess = requireSession();
+  const [resources, sites] = await Promise.all([data.resources(sess.orgId), data.sites(sess.orgId)]);
+  const totalItems = resources.length;
+  const lowStock = resources.filter((r) => r.onHand < r.minStock).length;
+  const criticalDays = resources
     .filter((r) => r.burnRatePerDay > 0)
     .map((r) => Math.floor(r.onHand / r.burnRatePerDay))
     .filter((d) => d > 0);
@@ -41,18 +43,18 @@ export default function ResourcesPage() {
             <AlertTriangle className="h-6 w-6 text-[hsl(var(--warning))]" />
           </CardContent>
         </Card>
-        <Card className={minDays < 5 ? "border-destructive/40 bg-destructive/5" : ""}>
+        <Card className={minDays && minDays < 5 ? "border-destructive/40 bg-destructive/5" : ""}>
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <div className="text-xs text-muted-foreground uppercase tracking-wide">Lowest cover (days)</div>
               <div className="mt-2 text-3xl font-bold tabular-nums">{minDays || "—"}</div>
             </div>
-            <TrendingDown className={"h-6 w-6 " + (minDays < 5 ? "text-destructive" : "text-muted-foreground")} />
+            <TrendingDown className={"h-6 w-6 " + (minDays && minDays < 5 ? "text-destructive" : "text-muted-foreground")} />
           </CardContent>
         </Card>
       </div>
 
-      <ResourcesClient resources={d.resources} sites={d.sites} />
+      <ResourcesClient resources={resources} sites={sites} />
     </div>
   );
 }

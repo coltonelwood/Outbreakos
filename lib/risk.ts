@@ -1,10 +1,14 @@
-import type { Risk, ScreeningRecord } from "./types";
+import type { OrgSettings, Risk, ScreeningRecord } from "./types";
 
-// Transparent, rule-based operational risk scoring.
-// This is NOT a diagnostic. It assigns an *operational triage tier* used to
-// drive screening workflow actions (clear, monitor, secondary screen, isolate
-// & notify health officer). All factors and weights are visible and
-// explainable to the operator.
+// Operational triage tiering — NOT a clinical diagnosis. The output is an
+// escalation priority used to drive the screening workflow:
+//   low      → clear
+//   monitor  → enroll in daily symptom check-in
+//   elevated → secondary screening + history
+//   urgent   → isolate and notify health officer
+//
+// Factors and weights are transparent and configurable per-org so customers
+// can tune the platform to their site protocols.
 
 export interface RiskInput {
   symptoms: ScreeningRecord["symptoms"];
@@ -13,16 +17,17 @@ export interface RiskInput {
   hcwExposure: boolean;
   funeralExposure: boolean;
   originRegion: string;
+  highRiskRegions?: string[];
 }
 
 export interface RiskOutput {
-  risk: Risk;
+  tier: Risk;
   score: number;
   action: string;
   rationale: string[];
 }
 
-const HIGH_RISK_REGIONS = [
+const DEFAULT_HIGH_RISK_REGIONS = [
   "Bundibugyo",
   "Kasese",
   "North Kivu",
@@ -32,21 +37,47 @@ const HIGH_RISK_REGIONS = [
   "Equateur",
 ];
 
-export function scoreScreening(input: RiskInput): RiskOutput {
+const ACTIONS: Record<Risk, string> = {
+  low: "Clear for entry. No further follow-up required.",
+  monitor:
+    "Clear for entry. Enroll in 21-day daily symptom check-in via configured messaging channel.",
+  elevated:
+    "Move to secondary screening: take detailed history and prepare for possible referral to the on-call health authority.",
+  urgent:
+    "Move subject to the designated isolation area and notify the on-call health officer. Do not progress through general flow.",
+};
+
+export function scoreScreening(
+  input: RiskInput,
+  weights: OrgSettings["riskWeights"] = {
+    fever: 25,
+    bleeding: 40,
+    contact: 30,
+    travel: 20,
+    hcw: 15,
+    funeral: 20,
+  },
+  thresholds: { monitor: number; elevated: number; urgent: number } = {
+    monitor: 15,
+    elevated: 40,
+    urgent: 70,
+  },
+): RiskOutput {
   const rationale: string[] = [];
   let score = 0;
+  const regions = input.highRiskRegions ?? DEFAULT_HIGH_RISK_REGIONS;
 
   if (input.symptoms.fever) {
-    score += 25;
-    rationale.push("Reported fever (+25)");
+    score += weights.fever;
+    rationale.push(`Reported fever (+${weights.fever})`);
   }
   if (input.symptoms.vomitingDiarrhea) {
     score += 15;
     rationale.push("Vomiting / diarrhea (+15)");
   }
   if (input.symptoms.unexplainedBleeding) {
-    score += 40;
-    rationale.push("Unexplained bleeding (+40)");
+    score += weights.bleeding;
+    rationale.push(`Unexplained bleeding (+${weights.bleeding})`);
   }
   if (input.symptoms.fatigue) {
     score += 5;
@@ -57,57 +88,40 @@ export function scoreScreening(input: RiskInput): RiskOutput {
     rationale.push("Headache (+5)");
   }
   if (input.contactWithCase) {
-    score += 30;
-    rationale.push("Reported contact with suspected/confirmed case (+30)");
+    score += weights.contact;
+    rationale.push(`Contact with suspected/confirmed case (+${weights.contact})`);
   }
   if (input.hcwExposure) {
-    score += 15;
-    rationale.push("Healthcare worker exposure (+15)");
+    score += weights.hcw;
+    rationale.push(`Healthcare worker exposure (+${weights.hcw})`);
   }
   if (input.funeralExposure) {
-    score += 20;
-    rationale.push("Funeral / burial exposure (+20)");
+    score += weights.funeral;
+    rationale.push(`Funeral / burial exposure (+${weights.funeral})`);
   }
 
   const travelHit = input.travelHistory.some((t) =>
-    HIGH_RISK_REGIONS.some((r) => t.toLowerCase().includes(r.toLowerCase())),
+    regions.some((r) => t.toLowerCase().includes(r.toLowerCase())),
   );
   if (travelHit) {
-    score += 20;
-    rationale.push("Travel through active outbreak region (+20)");
+    score += weights.travel;
+    rationale.push(`Travel through active surveillance region (+${weights.travel})`);
   }
-
-  const originHit = HIGH_RISK_REGIONS.some((r) =>
+  const originHit = regions.some((r) =>
     input.originRegion.toLowerCase().includes(r.toLowerCase()),
   );
   if (originHit && !travelHit) {
     score += 15;
-    rationale.push("Origin in active outbreak region (+15)");
+    rationale.push("Origin in active surveillance region (+15)");
   }
 
-  let risk: Risk;
-  let action: string;
+  let tier: Risk;
+  if (score >= thresholds.urgent) tier = "urgent";
+  else if (score >= thresholds.elevated) tier = "elevated";
+  else if (score >= thresholds.monitor) tier = "monitor";
+  else tier = "low";
 
-  if (score >= 70) {
-    risk = "urgent";
-    action =
-      "Isolate immediately in designated area and notify the on-call health officer. Do not move subject through general flow.";
-  } else if (score >= 40) {
-    risk = "elevated";
-    action =
-      "Move to secondary screening, collect detailed history, prepare for possible referral to health authority.";
-  } else if (score >= 15) {
-    risk = "monitor";
-    action =
-      "Clear for entry; enroll in 21-day daily symptom check-in via SMS/WhatsApp.";
-  } else {
-    risk = "low";
-    action = "Clear for entry. No further follow-up required.";
-  }
+  if (rationale.length === 0) rationale.push("No operational risk factors reported.");
 
-  if (rationale.length === 0) {
-    rationale.push("No risk factors reported.");
-  }
-
-  return { risk, score, action, rationale };
+  return { tier, score, action: ACTIONS[tier], rationale };
 }
