@@ -82,6 +82,7 @@ function memAudit(orgId: string, actor: string, action: string, target: string, 
 // memBackend mirrors the repo interface exactly so the two are interchangeable.
 const memBackend = {
   async org(orgId: string) { return db().orgs.find((o) => o.id === orgId) || null; },
+  async allOrgIds() { return db().orgs.map((o) => o.id); },
   async users(orgId: string) { return db().users.filter((u) => u.orgId === orgId); },
   async sites(orgId: string) { return db().sites.filter((s) => s.orgId === orgId); },
   async regions(orgId: string) { return db().regions.filter((r) => r.orgId === orgId); },
@@ -269,6 +270,8 @@ const backend = isSupabaseConfigured() ? repo : memBackend;
 // ============================================================
 // PUBLIC ASYNC API (stable import surface for the app)
 // ============================================================
+
+export const listOrgIds = () => backend.allOrgIds();
 
 export const data = {
   org: (orgId: string) => backend.org(orgId),

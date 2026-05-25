@@ -75,6 +75,19 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
   );
 }
 
+// Sends a transactional invite/reset email when an email provider is set.
+// Returns true if actually sent, false if no provider configured (caller then
+// surfaces the link in-app). Throws only on a real provider failure.
+export async function sendInviteEmail(to: string, link: string, orgName: string): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) return false;
+  await sendEmail(
+    to,
+    `You've been invited to ${orgName} on OutbreakOS`,
+    `You've been invited to join ${orgName} on OutbreakOS.\n\nSet your password and sign in:\n${link}\n\nThis one-time link expires in 7 days. If you didn't expect this, ignore it.`,
+  );
+  return true;
+}
+
 async function sendSms(to: string, body: string): Promise<void> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;

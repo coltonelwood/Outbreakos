@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { changeUserRole, data, isDeactivated, inviteUser, setUserActive } from "@/lib/store";
 import { authErrorResponse, requireCapability } from "@/lib/auth";
+import { sendInviteEmail } from "@/lib/notify";
 
 const inviteSchema = z.object({
   email: z.string().email(),
@@ -51,16 +52,21 @@ export async function POST(req: Request) {
     parsed.data.name,
     parsed.data.role,
   );
-  // Until an email provider is configured, surface the set-password link to the
-  // inviting admin so they can deliver it out-of-band. With email configured,
-  // this is sent directly and NOT returned.
+  // Send the set-password link by email when a provider is configured;
+  // otherwise surface the link to the inviting admin to deliver out-of-band.
   const base = process.env.NEXT_PUBLIC_APP_URL || "";
   const inviteLink = `${base}/set-password?token=${token}`;
-  const emailConfigured = Boolean(process.env.RESEND_API_KEY || process.env.SMTP_URL);
+  const org = await data.org(sess.orgId);
+  let emailSent = false;
+  try {
+    emailSent = await sendInviteEmail(parsed.data.email, inviteLink, org?.name ?? "your team");
+  } catch {
+    emailSent = false; // provider failed — fall back to surfacing the link
+  }
   return NextResponse.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    inviteLink: emailConfigured ? undefined : inviteLink,
-    emailSent: emailConfigured,
+    inviteLink: emailSent ? undefined : inviteLink,
+    emailSent,
   });
 }
 

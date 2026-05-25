@@ -97,6 +97,9 @@ export const repo = {
     const rows = await pgSelect("organizations", `id=${eq(orgId)}&select=*&limit=1`);
     return rows[0] ? mapOrg(rows[0]) : null;
   },
+  async allOrgIds(): Promise<string[]> {
+    return (await pgSelect<any>("organizations", `select=id`)).map((r) => r.id as string);
+  },
   async users(orgId: string): Promise<Profile[]> {
     return (await pgSelect("profiles", `org_id=${eq(orgId)}&select=*&order=created_at`)).map(mapUser);
   },
